@@ -16,7 +16,7 @@
 ## Running the development server
 
 ```
-npm install
+npm run dev
 ```
 
 A link to PrSAT running locally will appear in your terminal.
