@@ -2,6 +2,39 @@
 
 > **Note:** This is a local build for deployment to fitelson.org. These changes are not committed to the GitHub repository (imapersonman/PrSAT).
 
+## 2026-02-16
+
+### Changed: "No model to display" Punctuation
+
+- Changed "No model to display!" to "No model to display." (period instead of exclamation mark)
+
+**Changes:**
+- `src/text_to_display.ts`: Updated message text in `model_finder_display`
+
+### Added: Deploy Script
+
+- Added `npm run deploy` script that builds and uploads `dist/` to fitelson.org via `scp`
+
+**Changes:**
+- `package.json`: Added `deploy` script
+
+### Fixed: Dev Server Command in README
+
+- Fixed the "Running the development server" section: changed `npm install` to `npm run dev`
+
+**Changes:**
+- `README.md`: Corrected the command in the dev server instructions
+
+## 2026-02-13
+
+### Removed: GitHub Actions CI Workflows
+
+- Removed Playwright and static deployment CI workflows (not needed — tests are run locally)
+
+**Changes:**
+- `.github/workflows/playwright.yml`: Deleted
+- `.github/workflows/static.yml`: Deleted
+
 ## 2026-02-11
 
 ### Removed: Redundant Clear Button from Model Evaluate Dialog
