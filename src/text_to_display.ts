@@ -1583,7 +1583,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
     if (state.tag === 'waiting') {
       right_side.innerHTML = ''
       state_display.innerHTML = ''
-      state_display.append('No model to display!')
+      state_display.append('No model to display.')
       model_part.classList.add('invalidated')
       model_container.innerHTML = ''
       constraints_view.innerHTML = ''
