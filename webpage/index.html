@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrSAT 3.0 — An Open Source Web-Based Tool for Probability Calculus</title>
+    <meta name="description" content="PrSAT is an open source web-based tool for testing the satisfiability of arbitrary sets of statements in the probability calculus. Try it directly in your browser — no installation required.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&family=Source+Code+Pro:wght@400;500&family=Source+Serif+Pro:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2d3436;
+            --primary-dark: #1e2527;
+            --primary-light: #636e72;
+            --accent: #00b894;
+            --accent-dark: #00a381;
+            --bg: #ffffff;
+            --bg-alt: #f5f6fa;
+            --text: #2d3436;
+            --text-light: #636e72;
+            --code-bg: #2d3436;
+            --code-text: #dfe6e9;
+            --success: #00b894;
+            --border: #dfe6e9;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Source Sans Pro', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.7;
+            color: var(--text);
+            background: var(--bg);
+        }
+        
+        /* Header */
+        header {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+            color: white;
+            padding: 3rem 1rem 4rem;
+            text-align: center;
+        }
+        
+        header h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.02em;
+        }
+        
+        header h1 span.version {
+            font-size: 1.5rem;
+            font-weight: 400;
+            opacity: 0.9;
+            vertical-align: super;
+        }
+        
+        header .subtitle {
+            font-size: 1.4rem;
+            opacity: 0.95;
+            font-weight: 400;
+            margin-bottom: 1.5rem;
+        }
+        
+        header .author {
+            font-size: 1.1rem;
+            opacity: 0.85;
+        }
+        
+        header .author a {
+            color: white;
+            text-decoration: underline;
+            text-decoration-color: rgba(255,255,255,0.5);
+        }
+        
+        header .author a:hover {
+            text-decoration-color: white;
+        }
+        
+        .badge {
+            display: inline-block;
+            background: var(--accent);
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 2rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-top: 1rem;
+        }
+        
+        /* Navigation */
+        nav {
+            background: white;
+            border-bottom: 1px solid var(--border);
+            padding: 0 1rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        nav ul {
+            max-width: 900px;
+            margin: 0 auto;
+            list-style: none;
+            display: flex;
+            gap: 0.5rem;
+            overflow-x: auto;
+        }
+        
+        nav a {
+            display: block;
+            padding: 1rem 1.25rem;
+            color: var(--text);
+            text-decoration: none;
+            font-weight: 500;
+            white-space: nowrap;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        nav a:hover {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+        
+        /* Main Content */
+        main {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem 1rem 4rem;
+        }
+        
+        section {
+            margin-bottom: 3rem;
+        }
+        
+        h2 {
+            font-size: 2rem;
+            color: var(--primary-dark);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--border);
+        }
+        
+        h3 {
+            font-size: 1.4rem;
+            color: var(--accent-dark);
+            margin: 2rem 0 0.75rem 0;
+        }
+        
+        h4 {
+            font-size: 1.1rem;
+            color: var(--text);
+            margin: 1.5rem 0 0.5rem 0;
+        }
+        
+        p {
+            margin-bottom: 1rem;
+        }
+        
+        ul, ol {
+            margin: 0 0 1rem 1.5rem;
+        }
+        
+        li {
+            margin-bottom: 0.5rem;
+        }
+        
+        code {
+            font-family: 'Source Code Pro', monospace;
+            background: var(--bg-alt);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        
+        a {
+            color: var(--accent-dark);
+        }
+        
+        a:hover {
+            color: var(--accent);
+        }
+        
+        /* Callouts */
+        .callout {
+            padding: 1rem 1.25rem;
+            border-radius: 8px;
+            margin: 1.5rem 0;
+            border-left: 4px solid;
+        }
+        
+        .callout-info {
+            background: #f5f6fa;
+            border-color: var(--primary-light);
+        }
+        
+        .callout-success {
+            background: #e8f8f5;
+            border-color: var(--accent);
+        }
+        
+        /* Launch Button */
+        .launch-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+            color: white;
+            padding: 1rem 2.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.2rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 12px rgba(0, 184, 148, 0.3);
+        }
+        
+        .launch-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 184, 148, 0.4);
+            color: white;
+        }
+        
+        .launch-section {
+            text-align: center;
+            padding: 2rem 0;
+        }
+        
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.95rem;
+        }
+        
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        th {
+            background: var(--bg-alt);
+            font-weight: 600;
+            color: var(--primary-dark);
+        }
+        
+        tr:hover {
+            background: var(--bg-alt);
+        }
+        
+        /* Footer */
+        footer {
+            background: var(--primary-dark);
+            color: rgba(255,255,255,0.8);
+            padding: 2rem 1rem;
+            text-align: center;
+        }
+        
+        footer a {
+            color: white;
+        }
+        
+        /* Responsive */
+        @media (max-width: 600px) {
+            header h1 {
+                font-size: 2.5rem;
+            }
+            
+            header .subtitle {
+                font-size: 1.1rem;
+            }
+            
+            nav ul {
+                gap: 0;
+            }
+            
+            nav a {
+                padding: 1rem 0.75rem;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>PrSAT <span class="version">3.0</span></h1>
+        <p class="subtitle">An Open Source, User-Friendly<br>Decision Procedure for Probability Calculus</p>
+        <p class="author">Koissi Adjorlolo and  <a href="http://fitelson.org">Branden Fitelson</a></p>
+        <span class="badge">No Installation Required</span>
+    </header>
+    
+    <nav>
+        <ul>
+            <li><a href="#about">About</a></li>
+            <li><a href="#try-it">Try It</a></li>
+            <li><a href="#syntax">Syntax</a></li>
+            <li><a href="#results">Results</a></li>
+            <li><a href="#source-code">Source Code</a></li>
+            <li><a href="#reference">Reference</a></li>
+            <li><a href="#contact">Contact</a></li>
+            <li><a href="#mathematica"><em>Mathematica v.</em></a></li>
+        </ul>
+    </nav>
+    
+    <main>
+        <section id="about">
+            <h2>What is PrSAT?</h2>
+            <p>
+                <strong>PrSAT 3.0</strong> is an open source web-based tool for testing the 
+                satisfiability of arbitrary sets of statements in the probability calculus. Given a set 
+                of probabilistic constraints, PrSAT determines whether they can be simultaneously satisfied 
+                and, iff so, returns a probability model witnessing satisfiability.
+            </p>
+            <p>
+                The new version of PrSAT requires only a web browser — no installation 
+                or software licenses required. Just enter your constraints and click "Find Model".
+            </p>
+        </section>
+        
+        <section id="try-it">
+            <h2>Try It Now</h2>
+            <p>
+                Launch PrSAT in your browser. Enter probabilistic constraints (in plain text), set options, 
+                and search for models.
+            </p>
+            <p>
+                The app page includes detailed syntax documentation and a short video demo of the software.
+            </p>
+            <div class="launch-section">
+                <a href="https://fitelson.org/PrSAT/dist/" target="_blank" class="launch-btn">
+                    🌐 Launch PrSAT 3.0
+                </a>
+            </div>
+        </section>
+        
+        <section id="syntax">
+            <h2>Syntax &amp; Usage</h2>
+            
+            <h3>Entering Constraints</h3>
+            <p>
+                Enter probabilistic constraints using a simple ASCII text syntax. Each constraint is displayed with 
+                live mathematical rendering so you can verify the parsed expression.
+            </p>
+            
+            <table>
+                <tr>
+                    <th>Syntax</th>
+                    <th>Meaning</th>
+                    <th>Example</th>
+                </tr>
+                <tr>
+                    <td><code>Pr(X)</code></td>
+                    <td>Unconditional probability</td>
+                    <td><code>Pr(H) = 1/2</code></td>
+                </tr>
+                <tr>
+                    <td><code>Pr(X | Y)</code></td>
+                    <td>Conditional probability</td>
+                    <td><code>Pr(H | E) > Pr(H)</code></td>
+                </tr>
+                <tr>
+                    <td><code>X & Y</code></td>
+                    <td>Conjunction (and)</td>
+                    <td><code>Pr(A & B) = 0</code></td>
+                </tr>
+                <tr>
+                    <td><code>X \/ Y</code> or <code>X v Y</code></td>
+                    <td>Disjunction (or)</td>
+                    <td><code>Pr(A \/ B) = 1</code> or <code>Pr(A v B) = 1</code></td>
+                </tr>
+                <tr>
+                    <td><code>~X</code> or <code>-X</code></td>
+                    <td>Negation (not)</td>
+                    <td><code>Pr(~E) = Pr(E)</code></td>
+                </tr>
+                <tr>
+                    <td><code>X -&gt; Y</code></td>
+                    <td>Conditional (if-then)</td>
+                    <td><code>Pr(P -&gt; Q) &gt;= Pr(Q | P)</code></td>
+                </tr>
+            </table>
+            
+            <p>
+                <strong>Comparison operators:</strong> <code>=</code>, <code>!=</code>, <code>&lt;</code>, 
+                <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code>
+            </p>
+            <p>
+                <strong>Arithmetic operators:</strong> <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>
+            </p>
+            
+            <h3>Options</h3>
+            <ul>
+                <li><strong>Regular:</strong> Check this to search for a regular (i.e., strictly positive) probability model</li>
+                <li><strong>Timeout:</strong> Set a maximum time limit for the solver (hours, minutes, seconds)</li>
+            </ul>
+        </section>
+        
+        <section id="results">
+            <h2>Understanding Results</h2>
+            
+            <p>After clicking <strong>Find Model</strong>, PrSAT returns one of two possible results:</p>
+            
+            <h3>Unsatisfiable</h3>
+            <p>
+                If the constraints are unsatisfiable, you'll see <strong>"Constraints are UNSATisfiable!"</strong> 
+                along with a truth table showing the atomic states and the algebraic form of your constraints.
+                This means no probability distribution can simultaneously satisfy all the algebraic constraints implied by your query.
+            </p>
+            
+            <h3>Satisfiable</h3>
+            <p>
+                If the constraints are satisfiable, you'll see <strong>"Constraints are SATisfiable!"</strong> 
+                with a probability model displayed as a truth table. The <strong>Assignment</strong> column shows 
+                the probability assigned to each atomic state. Assignments may include 
+                exact algebraic numbers with radicals when rational solutions don't exist. This is a decision 
+                procedure, so its solutions are exact (no numerical calculations or approximations are involved here).
+            </p>
+            
+            <h3>Model Evaluation</h3>
+            <p>
+                When a satisfying model is found, the <strong>Evaluate model</strong> panel lets you compute 
+                the value of any probability expression under that model. For example, enter a probabilistic 
+                expression like <code>Pr(B \/ C)</code> to see its value, or enter a claim like 
+                <code>Pr(X | Y) &gt;= Pr(X)</code> to compute its truth-value on the model. You can also load 
+                expressions from a file or use batch input for multiple evaluations.
+            </p>
+            
+            <h3>Import/Export</h3>
+            <ul>
+                <li><strong>Save to File:</strong> Export your constraints for later use</li>
+                <li><strong>Copy to Clipboard:</strong> Copy constraints in a format ready to paste elsewhere</li>
+                <li><strong>Load From File:</strong> Import previously saved constraints or evaluation expressions</li>
+                <li><strong>Save translated constraints:</strong> Export the algebraic form of your constraints</li>
+                <li><strong>Save SMTLIB input:</strong> Export constraints in SMT-LIB format for use with external SMT solvers</li>
+            </ul>
+        </section>
+        
+        <section id="source-code">
+            <h2>Source Code</h2>
+            <p>
+                The PrSAT 3.0 source code is available on GitHub:
+            </p>
+            <p style="margin-left: 1.5rem;">
+                <a href="https://github.com/fitelson/PrSAT">github.com/fitelson/PrSAT</a>
+            </p>
+        </section>
+        
+        <section id="reference">
+            <h2>Reference</h2>
+            <p>
+                For the theory behind PrSAT and applications in formal epistemology, see:
+            </p>
+            <p style="margin-left: 1.5rem;">
+                <a href="http://fitelson.org">Branden Fitelson</a>. <em>A Decision Procedure for Probability Calculus with Applications</em>. 
+                Review of Symbolic Logic. 
+                <a href="http://fitelson.org/pm.pdf">PDF available here</a>.
+            </p>
+        </section>
+        
+        <section id="contact">
+            <h2>Contact</h2>
+            <p>
+                For bug reports, feature requests, or questions, please contact 
+                <a href="http://fitelson.org">Branden Fitelson</a>.
+            </p>
+        </section>
+        
+        <section id="mathematica">
+            <h2><em>Mathematica</em> Version of PrSAT 3.0</h2>
+            <p>
+                A fully revamped and upgraded version 3.0 of the PrSAT <em>Mathematica</em> package (now with external SMT-solver support) is available (from <a href="http://fitelson.org">Branden Fitelson</a>) upon request.
+            </p>
+        </section>
+    </main>
+    
+    <footer>
+        <p>
+            PrSAT 3.0 &copy; 2026 <a href="http://fitelson.org">Branden Fitelson</a> and Koissi Adjorlolo
+        </p>
+    </footer>
+</body>
+</html>

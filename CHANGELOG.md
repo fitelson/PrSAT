@@ -1,6 +1,15 @@
 # PrSAT 3.0 Changelog
 
-> **Note:** This is a local build for deployment to fitelson.org. These changes are not committed to the GitHub repository (imapersonman/PrSAT).
+> **Note:** This is a local build for deployment to fitelson.org.
+
+## 2026-02-28
+
+### Changed: Source Code Link on Webpage
+
+- Updated the source code link on the project webpage from `github.com/imapersonman/PrSAT` to `github.com/fitelson/PrSAT`
+
+**Changes:**
+- `webpage/index.html`: Updated GitHub URL in the Source Code section
 
 ## 2026-02-16
 

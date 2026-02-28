@@ -23,6 +23,7 @@ PrSAT (Probability Satisfiability) is a web-based tool for checking satisfiabili
 | `src/pr_sat.ts` | Constraint translation, truth table generation |
 | `src/parser.ts` | Parsing probability expressions |
 | `src/block_playground.ts` | Constraint input block UI (Load, Save, Clear, Batch) |
+| `webpage/index.html` | Project webpage (deployed to fitelson.org/PrSAT/) |
 | `CHANGELOG.md` | Local changes (not committed to upstream) |
 
 ## How It Works
@@ -63,8 +64,10 @@ npx playwright test --project chromium tests/simple.spec.ts  # Single e2e test
 
 ## Deployment Notes
 
-- This is a **local fork** for fitelson.org deployment
-- Upstream repo: `imapersonman/PrSAT` (changes here not committed there)
+- **GitHub repo:** `fitelson/PrSAT` (forked from `imapersonman/PrSAT`)
+- **Live site:** https://fitelson.org/PrSAT/
+- `npm run deploy` builds and uploads `dist/` to the server via scp
+- Webpage (`webpage/` directory) deployed separately: `scp webpage/* fitelson@fitelson.org:/home/fitelson/www/www/PrSAT/`
 - `dist/.htaccess` required for Apache servers (cross-origin isolation headers)
 - iOS Safari requires proper COEP/COOP headers for SharedArrayBuffer
 
