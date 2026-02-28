@@ -4,6 +4,14 @@
 
 ## 2026-02-28
 
+### Added: Contributors Section to README
+
+- Added Contributors section listing Koissi Adjorlolo, Claude, and Branden Fitelson
+- Re-authored initial commit to Koissi Adjorlolo so he appears in GitHub's Contributors sidebar
+
+**Changes:**
+- `README.md`: Added Contributors section at top of file
+
 ### Changed: Source Code Link on Webpage
 
 - Updated the source code link on the project webpage from `github.com/imapersonman/PrSAT` to `github.com/fitelson/PrSAT`

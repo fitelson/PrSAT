@@ -24,7 +24,7 @@ PrSAT (Probability Satisfiability) is a web-based tool for checking satisfiabili
 | `src/parser.ts` | Parsing probability expressions |
 | `src/block_playground.ts` | Constraint input block UI (Load, Save, Clear, Batch) |
 | `webpage/index.html` | Project webpage (deployed to fitelson.org/PrSAT/) |
-| `CHANGELOG.md` | Local changes (not committed to upstream) |
+| `CHANGELOG.md` | Change history for local/fork changes |
 
 ## How It Works
 
@@ -73,6 +73,7 @@ npx playwright test --project chromium tests/simple.spec.ts  # Single e2e test
 
 ## Recent Work (2026-01/02)
 
+- Added Contributors section to README (Koissi Adjorlolo, Claude, Branden Fitelson)
 - Added `v` as disjunction symbol (in addition to `∨` and `\/`)
 - Simplified syntax error message to "Syntax error (not a wff)." on button
 - Added Clear button for constraint entry (resets to single empty input); removed redundant Clear from model evaluate heading
