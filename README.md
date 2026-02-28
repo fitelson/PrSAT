@@ -1,3 +1,9 @@
+## Contributors
+
+- [Koissi Adjorlolo](https://github.com/imapersonman)
+- [Claude](https://claude.ai/code) (AI pair programmer)
+- [Branden Fitelson](https://github.com/fitelson)
+
 ## Installation
 
 ### Requirements
