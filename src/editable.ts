@@ -64,9 +64,7 @@ export class AsyncEditable<T> {
 
   private async notify(new_value: T, old_value?: T) {
     this.value = new_value
-    for (const [_, w] of this.watchers.entries()) {
-      await w.call(old_value)
-    }
+    await Promise.all([...this.watchers.values()].map(w => w.call(old_value)))
   }
 
   watch(f: (value: T, old?: T) => Promise<undefined>): AsyncWatcher<T> {

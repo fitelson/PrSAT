@@ -135,7 +135,7 @@ export type FancyEvaluatorOutput =
 // The given Solver should already have all the other variables inside it declared but if not I will CRY.
 export const fancy_evaluate_constraint_or_real_expr = async <CtxKey extends string>(ctx: Context<CtxKey>, model: Model<CtxKey>, tt: TruthTable, c_or_re: ConstraintOrRealExpr): Promise<FancyEvaluatorOutput> => {
   const free_sentence_vars = free_sentence_variables_in_constraint_or_real_expr(c_or_re, new LetterSet(), new LetterSet([...tt.letters()]))
-  const free_real_vars = free_real_variables_in_constraint_or_real_expr(c_or_re, new Set)
+  const free_real_vars = free_real_variables_in_constraint_or_real_expr(c_or_re, new Set<string>())
 
   if (!free_sentence_vars.is_empty() || free_real_vars.size > 0) {
     return { tag: 'undeclared-vars', variables: { sentence: [...free_sentence_vars], real: [...free_real_vars] } }
@@ -426,8 +426,6 @@ export const parse_to_assignment = (s: S): ModelAssignmentOutput => {
             if (previous_exp !== undefined && previous_exp <= exp) {
               throw new Error('Expected exponents to monotonically decrease in polynomial!')
             }
-
-            assert(previous_exp === undefined || previous_exp > exp)
             if (previous_exp !== undefined) {
               for (let exp_gap = previous_exp - 1; exp_gap > exp; exp_gap--) {
                 coefficients.push(0)

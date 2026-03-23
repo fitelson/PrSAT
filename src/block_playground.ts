@@ -105,7 +105,7 @@ export const split_input = <ParseOutput extends {}>(
       p?.associate.set_cursor(cursor_position)
       event.preventDefault()
     } else if (event.key === 'ArrowDown') {
-      const cursor_position = assert_exists(textbox.selectionEnd, 'While trying to get cursor position, ArrowUp event called when textbox not focused')
+      const cursor_position = assert_exists(textbox.selectionEnd, 'While trying to get cursor position, ArrowDown event called when textbox not focused')
       const n = logic.focus_next()
       n?.associate.set_cursor(cursor_position)
       event.preventDefault()

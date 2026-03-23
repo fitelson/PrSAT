@@ -467,8 +467,8 @@ const constraint_grammar_to_recursors = (cg: ConstraintMutualMap['grammar']): Mu
 describe('constraint_inits', () => {
   const inits = constraint_grammar_to_inits(constraint_grammar)
   const { letter, conjunction } = inits.Sentence
-  test('A', () => expect(letter({ id: 'A', index: 0 })).toEqual({ tag: 'letter', id: 'A' }))
-  test('A & B', () => expect(conjunction({ left: letter({ id: 'A', index: 0 }), right: letter({ id: 'B', index: 0 }) })).toEqual({ tag: 'conjunction', left: { tag: 'letter', id: 'A' }, right: { tag: 'letter', id: 'B' } }))
+  test('A', () => expect(letter({ id: 'A', index: 0 })).toEqual({ tag: 'letter', id: 'A', index: 0 }))
+  test('A & B', () => expect(conjunction({ left: letter({ id: 'A', index: 0 }), right: letter({ id: 'B', index: 0 }) })).toEqual({ tag: 'conjunction', left: { tag: 'letter', id: 'A', index: 0 }, right: { tag: 'letter', id: 'B', index: 0 } }))
 })
 
 describe('constraint_recursors', () => {
@@ -582,19 +582,21 @@ describe('constraint_savers', () => {
     record: {
       // tag: { tag: 'constant', value: 'letter' },
       id: { tag: 'primitive', value: 'A' },
+      index: { tag: 'primitive', value: 0 },
     },
   }))
   test('A & B', () => expect(savers.Sentence(AandB)).toEqual({
     tag: 'record',
     mm_keys: { top: 'Sentence', inner: 'conjunction', },
     record: {
-      // tag: { tag: 'constant', value: 'conjunction' }, 
+      // tag: { tag: 'constant', value: 'conjunction' },
       left: {
         tag: 'record',
         mm_keys: { top: 'Sentence', inner: 'letter' },
         record: {
           // tag: { tag: 'constant', value: 'letter' },
-          id: { tag: 'primitive', value: 'A' }
+          id: { tag: 'primitive', value: 'A' },
+          index: { tag: 'primitive', value: 0 },
         },
       },
       right: {
@@ -602,7 +604,8 @@ describe('constraint_savers', () => {
         mm_keys: { top: 'Sentence', inner: 'letter' },
         record: {
           // tag: { tag: 'constant', value: 'letter' },
-          id: { tag: 'primitive', value: 'B' }
+          id: { tag: 'primitive', value: 'B' },
+          index: { tag: 'primitive', value: 0 },
         },
       },
     },
@@ -616,13 +619,14 @@ describe('constraint_savers', () => {
         tag: 'record',
         mm_keys: { top: 'Sentence', inner: 'conjunction' },
         record: {
-          // tag: { tag: 'constant', value: 'conjunction' }, 
+          // tag: { tag: 'constant', value: 'conjunction' },
           left: {
             tag: 'record',
             mm_keys: { top: 'Sentence', inner: 'letter' },
             record: {
               // tag: { tag: 'constant', value: 'letter' },
-              id: { tag: 'primitive', value: 'A' }
+              id: { tag: 'primitive', value: 'A' },
+              index: { tag: 'primitive', value: 0 },
             },
           },
           right: {
@@ -630,7 +634,8 @@ describe('constraint_savers', () => {
             mm_keys: { top: 'Sentence', inner: 'letter' },
             record: {
               // tag: { tag: 'constant', value: 'letter' },
-              id: { tag: 'primitive', value: 'B' }
+              id: { tag: 'primitive', value: 'B' },
+              index: { tag: 'primitive', value: 0 },
             },
           },
         },
@@ -654,6 +659,7 @@ describe('constraint_loaders', () => {
     mm_keys: { top: 'Sentence', inner: 'letter' },
     record: {
       id: { tag: 'primitive', value: 'A' },
+      index: { tag: 'primitive', value: 0 },
     },
   })).toEqual(A))
   test('A & B', () => expect(loaders.Sentence({
@@ -664,14 +670,16 @@ describe('constraint_loaders', () => {
         tag: 'record',
         mm_keys: { top: 'Sentence', inner: 'letter' },
         record: {
-          id: { tag: 'primitive', value: 'A' }
+          id: { tag: 'primitive', value: 'A' },
+          index: { tag: 'primitive', value: 0 },
         },
       },
       right: {
         tag: 'record',
         mm_keys: { top: 'Sentence', inner: 'letter' },
         record: {
-          id: { tag: 'primitive', value: 'B' }
+          id: { tag: 'primitive', value: 'B' },
+          index: { tag: 'primitive', value: 0 },
         },
       },
     },
@@ -688,14 +696,16 @@ describe('constraint_loaders', () => {
             tag: 'record',
             mm_keys: { top: 'Sentence', inner: 'letter' },
             record: {
-              id: { tag: 'primitive', value: 'A' }
+              id: { tag: 'primitive', value: 'A' },
+              index: { tag: 'primitive', value: 0 },
             },
           },
           right: {
             tag: 'record',
             mm_keys: { top: 'Sentence', inner: 'letter' },
             record: {
-              id: { tag: 'primitive', value: 'B' }
+              id: { tag: 'primitive', value: 'B' },
+              index: { tag: 'primitive', value: 0 },
             },
           },
         },
@@ -745,7 +755,7 @@ describe('constraint_fuzzers', () => {
   }
 })
 
-describe.only('full_from_partial_string_params', () => {
+describe('full_from_partial_string_params', () => {
   test('', () => {
     const partial = {
       bounds: {

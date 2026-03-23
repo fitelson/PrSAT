@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { match_s, S, clause, default_clause, spv } from './s';
 import { MyMath } from './parsimmon_expr';
 
-test.only('something', () => {
+test('something', () => {
   // console.log(MyMath.tryParse('2 + ((3 * 4)) / 1 - 3 ^ (2!)'))
   const evaluate = (s: S): number => {
     const [a, b] = [spv('a'), spv('b')]

@@ -828,7 +828,7 @@ export const combine_inverse = (svs1: RealExprMap['state_variable_sum'], svs2: R
     return lit(1)
   } else if (svs2_diff_svs1.length === 0) {
     return plus(lit(1), svs(svs1_diff_svs2))
-  } else if (svs1_diff_svs2) {
+  } else if (svs1_diff_svs2.length === 0) {
     return minus(lit(1), svs(svs2_diff_svs1))
   } else {
     return plus(lit(1), minus(svs(svs1_diff_svs2), svs(svs2_diff_svs1)))

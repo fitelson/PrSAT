@@ -112,7 +112,7 @@ const ConstraintLang = P.createLanguage({
     .assert((operands) => operands.length >= 2, 'Imp expects at least 2 operands!')
     .map((operands) => operands.reduceRight((pv, cv) => imp(cv, pv))),
   CIff: (r) => r.ConstraintFactor.sepBy(P.optWhitespace.skip(ctag_to_c_parser('biconditional')).skip(P.optWhitespace))
-    .assert((operands) => operands.length >= 2, 'Imp expects at least 2 operands!')
+    .assert((operands) => operands.length >= 2, 'Iff expects at least 2 operands!')
     .map((operands) => operands.reduceRight((pv, cv) => iff(cv, pv))),
   
   ProbabilityLead: () => P.alt(P.string('Pr('), P.string('P('), P.string('p(')),
