@@ -20,7 +20,7 @@ To insert a [Constraint], type in one of:
 - '~[Constraint]', '![Constraint]', or '-[Constraint]' for negation,
 - '[Constraint] ∨ [Constraint]', '[Constraint] \\/ [Constraint]', or '[Constraint] v [Constraint]' for disjunction,
 - '[Constraint] & [Constraint]' for conjunction,
-- '[Constraint] → [Constraint]', '[Constraint] -> [Constraint]', or '[Constraint] > [Constraint]' for biconditional,
+- '[Constraint] → [Constraint]', '[Constraint] -> [Constraint]', or '[Constraint] > [Constraint]' for conditional,
 - '[Constraint] ↔ [Constraint]', '[Constraint] <-> [Constraint]', or '[Constraint] <> [Constraint]' for biconditional.
 
 To insert a [RealExpr], type in one of:
@@ -41,7 +41,7 @@ To insert a [Sentence], type in one of:
 - '~[Sentence]', '![Sentence]', or '-[Sentence]' for negation,
 - '[Sentence] ∨ [Sentence]', '[Sentence] \\/ [Sentence]', or '[Sentence] v [Sentence]' for disjunction,
 - '[Sentence] & [Sentence]' for conjunction,
-- '[Sentence] → [Sentence]', '[Sentence] -> [Sentence]', or '[Sentence] > [Sentence]' for biconditional,
+- '[Sentence] → [Sentence]', '[Sentence] -> [Sentence]', or '[Sentence] > [Sentence]' for conditional,
 - '[Sentence] ↔ [Sentence]', '[Sentence] <-> [Sentence]', or '[Sentence] <> [Sentence]' for biconditional.
 `.trim()
 export const CONSTRAINT_OR_REAL_EXPR_INPUT_INSTRUCTIONS = `
