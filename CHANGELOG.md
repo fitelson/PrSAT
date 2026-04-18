@@ -10,7 +10,7 @@
 - Fixed two typos in the in-app input instructions where the conditional connective (`->`/`→`/`>`) was mislabeled as "biconditional" in both the Constraint and Sentence sections.
 
 **Changes:**
-- `webpage/index.html`: New "Combining Constraints (Metalinguistic Connectives)" and "Verifying Theorems" subsections under Syntax & Usage
+- `webpage/index.html`: New "Logical Combinations of Probabilistic Constraints" subsection under Syntax & Usage
 - `src/constants.ts`: Corrected "biconditional" → "conditional" for the `->`/`→`/`>` rules in `CONSTRAINT_INPUT_INSTRUCTIONS`
 - `src/compound_constraint_demo.spec.ts`: Added regression test that parses a compound theorem and verifies it via Z3 (negation UNSAT)
 

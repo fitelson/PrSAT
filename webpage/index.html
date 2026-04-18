@@ -394,7 +394,7 @@
                 <strong>Arithmetic operators:</strong> <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>
             </p>
 
-            <h3>Combining Constraints (Metalinguistic Connectives)</h3>
+            <h3>Logical Combinations of Probabilistic Constraints</h3>
             <p>
                 The same logical connectives can also join entire probabilistic constraints, not just sentences inside <code>Pr(...)</code>.
                 The parser disambiguates by context: inside <code>Pr(...)</code> the connectives join sentence letters; outside, they join whole
@@ -427,30 +427,6 @@
                     <td><code>Pr(A) = 1/2 &lt;-&gt; Pr(~A) = 1/2</code></td>
                 </tr>
             </table>
-
-            <h3>Verifying Theorems</h3>
-            <p>
-                Because PrSAT supports compound constraints, a theorem of the probability calculus can be checked by entering its
-                <em>negation</em> as a single constraint and asking PrSAT to find a model. If PrSAT reports
-                <strong>UNSAT</strong>, no counter-model exists and the theorem holds. If PrSAT reports <strong>SAT</strong>,
-                the returned probability assignment is a counterexample.
-            </p>
-            <p>
-                For example, to verify the theorem
-            </p>
-            <p style="margin-left: 1.5rem;">
-                <em>Pr(A | A &lt;-&gt; B) = Pr(A | ~(A &lt;-&gt; B)) and Pr(B | A &lt;-&gt; B) = Pr(B | ~(A &lt;-&gt; B))
-                IFF Pr(A) = 1/2 and Pr(B) = 1/2,</em>
-            </p>
-            <p>
-                enter the following single constraint and click <strong>Find Model</strong>:
-            </p>
-            <p style="margin-left: 1.5rem;">
-                <code>~((Pr(A | A &lt;-&gt; B) = Pr(A | ~(A &lt;-&gt; B)) & Pr(B | A &lt;-&gt; B) = Pr(B | ~(A &lt;-&gt; B))) &lt;-&gt; (Pr(A) = 1/2 & Pr(B) = 1/2))</code>
-            </p>
-            <p>
-                PrSAT returns UNSAT, confirming the biconditional is a theorem.
-            </p>
 
             <h3>Options</h3>
             <ul>
