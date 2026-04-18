@@ -4,15 +4,15 @@
 
 ## 2026-04-18
 
-### Documented: Metalinguistic Connectives Between Constraints
+### Documented: Logical Combinations of Probabilistic Constraints
 
-- Documented on the project webpage that the same logical connectives (`~`, `&`, `v`/`\/`/`∨`, `->`/`>`/`→`, `<->`/`<>`/`↔`) work both inside `Pr(...)` (joining sentence letters) and between whole probabilistic constraints (joining equalities/inequalities). Added a comparison table and a worked theorem-verification example using negation + UNSAT.
+- Documented on the project webpage that the same logical connectives (`~`, `&`, `v`/`\/`/`∨`, `->`/`>`/`→`, `<->`/`<>`/`↔`) work at two levels: sentence-level (inside `Pr(...)`, joining statements of propositional calculus) and constraint-level (joining whole probabilistic constraints). Added a side-by-side comparison table.
 - Fixed two typos in the in-app input instructions where the conditional connective (`->`/`→`/`>`) was mislabeled as "biconditional" in both the Constraint and Sentence sections.
 
 **Changes:**
 - `webpage/index.html`: New "Logical Combinations of Probabilistic Constraints" subsection under Syntax & Usage
 - `src/constants.ts`: Corrected "biconditional" → "conditional" for the `->`/`→`/`>` rules in `CONSTRAINT_INPUT_INSTRUCTIONS`
-- `src/compound_constraint_demo.spec.ts`: Added regression test that parses a compound theorem and verifies it via Z3 (negation UNSAT)
+- `src/compound_constraint_demo.spec.ts`: Added regression test that parses a compound constraint built from `&` and `<->` and verifies it via Z3
 
 ## 2026-02-28
 

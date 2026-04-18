@@ -71,8 +71,18 @@ npx playwright test --project chromium tests/simple.spec.ts  # Single e2e test
 - `dist/.htaccess` required for Apache servers (cross-origin isolation headers)
 - iOS Safari requires proper COEP/COOP headers for SharedArrayBuffer
 
-## Recent Work (2026-01/02)
+## Logical Connectives: Two Levels
 
+The same connective symbols (`~`/`-`/`!`, `&`/`/\`, `v`/`\/`/`∨`, `->`/`>`/`→`, `<->`/`<>`/`↔`) parse at **two** levels and the parser disambiguates by context:
+
+- **Sentence-level** (inside `Pr(...)`): join statements of propositional calculus. E.g. `Pr(A & B) = 1/4`, `Pr(A <-> B) = 1`.
+- **Constraint-level** (outside `Pr(...)`): join whole probabilistic constraints into a single compound `Constraint`. E.g. `Pr(A) = 1/2 & Pr(B) = 1/2`, `~(Pr(A) = Pr(B))`, `(c1 & c2) <-> c3`.
+
+Symbols are defined identically in `src/pr_sat.ts` (`possible_constraint_connectives` ≈ line 548, `possible_sentence_connectives` ≈ line 696). The constraint-level translation to Z3 lives in `constraint_to_bool` in `src/z3_integration.ts`. Compound metalinguistic constraints have always been supported — this enables single-input theorem-checking by entering the negation of a putative theorem and looking for UNSAT.
+
+## Recent Work (2026-01/04)
+
+- **2026-04-18:** Documented the two-level connective overloading on the project webpage; fixed in-app help typo where `->`/`→`/`>` was labeled "biconditional"
 - Added Contributors section to README (Koissi Adjorlolo, Claude, Branden Fitelson)
 - Added `v` as disjunction symbol (in addition to `∨` and `\/`)
 - Simplified syntax error message to "Syntax error (not a wff)." on button
