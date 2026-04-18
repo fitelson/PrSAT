@@ -82,6 +82,7 @@ Symbols are defined identically in `src/pr_sat.ts` (`possible_constraint_connect
 
 ## Recent Work (2026-01/04)
 
+- **2026-04-18:** Upgraded `z3-solver` 4.15.4 → 4.16.0 and refreshed bundled WASM assets
 - **2026-04-18:** Documented the two-level connective overloading on the project webpage; fixed in-app help typo where `->`/`→`/`>` was labeled "biconditional"
 - Added Contributors section to README (Koissi Adjorlolo, Claude, Branden Fitelson)
 - Added `v` as disjunction symbol (in addition to `∨` and `\/`)

@@ -2,6 +2,16 @@
 
 > **Note:** This is a local build for deployment to fitelson.org.
 
+## 2026-04-18 (later)
+
+### Upgraded: z3-solver 4.15.4 → 4.16.0
+
+- Bumped `z3-solver` to the latest upstream release. Rebuilt bundled WASM assets. All 567 unit tests pass.
+
+**Changes:**
+- `package.json`, `package-lock.json`: `z3-solver` 4.15.4 → 4.16.0
+- `public/z3-built.js`, `public/z3-built.wasm`: refreshed via `npm run copy-files`
+
 ## 2026-04-18
 
 ### Documented: Logical Combinations of Probabilistic Constraints
