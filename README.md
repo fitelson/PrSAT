@@ -2,6 +2,7 @@
 
 - [Koissi Adjorlolo](https://github.com/imapersonman)
 - [Claude](https://claude.ai/code) (AI pair programmer)
+- [Codex](https://openai.com/codex/) (AI pair programmer)
 - [Branden Fitelson](https://github.com/fitelson)
 
 ## Installation
