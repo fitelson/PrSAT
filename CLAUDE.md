@@ -83,6 +83,7 @@ Symbols are defined identically in `src/pr_sat.ts` (`possible_constraint_connect
 ## Recent Work (2026)
 
 - **2026-06-10:** Fixed the June 2026 bug-review set: critical SMT-LIB soundness bugs for nested `=>`, subtraction, and division; exponentiation handling; parser backtracking; exact numeric literal preservation; local conditional-probability denominator guards; free real-variable declaration/evaluation; native Z3 timeout on the wrapped solver path; UI/input async races; model/root display bugs; deploy dotfile upload; production cache headers. Verification: `npm run build` and `npx vitest --run` pass.
+- **2026-06-10:** Hid the internal one-state `a_i` truth-table/model UI for arithmetic-only constraints with no sentence letters; these cases now show only SAT/UNSAT, save buttons, and translated constraints.
 - **2026-04-18:** Upgraded `z3-solver` 4.15.4 → 4.16.0 and refreshed bundled WASM assets
 - **2026-04-18:** Documented the two-level connective overloading on the project webpage; fixed in-app help typo where `->`/`→`/`>` was labeled "biconditional"
 - Added Contributors section to README (Koissi Adjorlolo, Claude, Branden Fitelson)

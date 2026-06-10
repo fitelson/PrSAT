@@ -823,6 +823,8 @@ const truth_table_display = (tt: TruthTable): HTMLElement => {
   return e
 }
 
+const has_probability_table = (tt: TruthTable): boolean => Array.from(tt.letters()).length > 0
+
 const model_display = (tt: TruthTable, model_assignments: Record<number, ModelAssignmentOutput>): HTMLElement => {
   // One column per sentence-letter
   // Header has the form "A1 | A2 | ... | An | a_i | Assignment"
@@ -1420,8 +1422,9 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
     state2.set({ tag: 'looking', truth_table, abort_controller })
     model_container.innerHTML = ''
     try {
-      const tt_display = truth_table_display(truth_table)
-      model_container.appendChild(tt_display)
+      if (has_probability_table(truth_table)) {
+        model_container.appendChild(truth_table_display(truth_table))
+      }
       // const { status, all_constraints, state_values, model } = await pr_sat_with_truth_table(ctx, truth_table, constraints, is_regular)
       // const result = await pr_sat_with_options(ctx, truth_table, constraints, { regular: is_regular, timeout_ms: timeout_ms.get() })
       const result = await pr_sat_wrapped(solver, truth_table, constraints, {
@@ -1466,7 +1469,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
       )
 
       // Only add the table image button if we have a SAT result (model/table exists)
-      if (result.solver_output.status === 'sat') {
+      if (result.solver_output.status === 'sat' && has_probability_table(truth_table)) {
         const save_table_image_button = el('input', { type: 'button', value: 'Save table as image' }) as HTMLButtonElement
         save_table_image_button.onclick = async () => {
           const originalPadding = model_container.style.paddingBottom
@@ -1559,9 +1562,13 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
     // Logic
     if (state.tag === 'finished') {
       if (state.solver_output.solver_output.status === 'sat') {
-        model_assignments2.set({ truth_table: state.truth_table, values: state.solver_output.solver_output.state_assignments })
-        // evaluators.multi_input.refresh()
-        evaluators.refresh()
+        if (has_probability_table(state.truth_table)) {
+          model_assignments2.set({ truth_table: state.truth_table, values: state.solver_output.solver_output.state_assignments })
+          // evaluators.multi_input.refresh()
+          evaluators.refresh()
+        } else {
+          model_assignments2.set(undefined)
+        }
       // } else if (state.solver_output.solver_output.) {
         // evaluators.multi_input.refresh()
         // evaluators.refresh()
@@ -1607,10 +1614,12 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
       if (state.solver_output.solver_output.status === 'sat') {
         state_display.innerHTML = ''
         state_display.append(Constants.SAT)
-        const model_html = model_display(state.truth_table, state.solver_output.solver_output.state_assignments)
         model_container.innerHTML = ''
-        model_container.appendChild(model_html)
-        right_side.appendChild(evaluators.element)
+        right_side.innerHTML = ''
+        if (has_probability_table(state.truth_table)) {
+          model_container.appendChild(model_display(state.truth_table, state.solver_output.solver_output.state_assignments))
+          right_side.appendChild(evaluators.element)
+        }
       } else if (state.solver_output.solver_output.status === 'unsat') {
         state_display.innerHTML = ''
         state_display.append(Constants.UNSAT)

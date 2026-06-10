@@ -19,6 +19,7 @@
 
 - Fixed timeout clearing, stale exception/status display, repeated cancel clicks, disabled solve options during active solves, empty-constraint Find Model enablement, save-table-image padding restoration, and global unhandled-rejection messages.
 - Fixed batch/file input synchronization, repeated load of the same file, clipboard error handling, stale async display output after edits/removals, focused-row removal, and redundant focus churn.
+- Hid the degenerate one-state `a_i` table, model evaluator pane, and save-table-as-image control for arithmetic-only constraints with no sentence letters.
 - Fixed rational model stringification, root polynomial exponent/trailing-zero handling, displayed polynomial signs, exact S-expression matching, abortable sleep cleanup, `EditableDLL.watch_remove`, duplicate-data `DLL.insert_before`, and bounded random floats.
 
 ### Changed: Build, Deploy, and Documentation
