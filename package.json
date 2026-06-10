@@ -6,11 +6,11 @@
   "scripts": {
     "dev": "vite",
     "copy-files": "cp node_modules/z3-solver/build/z3-built.js node_modules/z3-solver/build/z3-built.wasm public",
-    "build": "tsc && vite build",
+    "build": "npm run copy-files && tsc && vite build",
     "preview": "vite preview",
     "test": "vitest --allowOnly --run && npx playwright test --project chromium --project firefox",
     "test-single": "vitest --allowOnly",
-    "deploy": "npm run build && scp -r dist/* fitelson@fitelson.org:/home/fitelson/www/www/PrSAT/dist/"
+    "deploy": "npm run build && scp -r dist/. fitelson@fitelson.org:/home/fitelson/www/www/PrSAT/dist/"
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",

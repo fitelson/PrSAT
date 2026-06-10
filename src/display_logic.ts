@@ -236,7 +236,11 @@ export class InputBlockLogic<ParseOutput extends {}, Associate = undefined> {
       return undefined
     }
 
+    if (this.focused.get() === to_remove) {
+      this.set_focus(replacement)
+    }
     this.inputs.remove(to_remove)
+    to_remove.destroy()
     this.update_outputs()
 
     return replacement
@@ -257,6 +261,9 @@ export class InputBlockLogic<ParseOutput extends {}, Associate = undefined> {
 
   set_focus(input: SingleInputLogic<ParseOutput, Associate> | undefined): void {
     const prev_focused = this.focused.get()
+    if (prev_focused === input) {
+      return
+    }
     if (prev_focused !== undefined) {
       prev_focused.is_focused.set(false)
     }
@@ -307,16 +314,17 @@ export class InputBlockLogic<ParseOutput extends {}, Associate = undefined> {
   }
 
   async set_fields(fields: string[]): Promise<void> {
-    const trimmed_fields = fields.map((f) => f.trim())
-    for (const [index, input] of this.inputs.entries()) {
-      if (index >= trimmed_fields.length) {
-        // remove there's too many!
-        input.remove()
-      } else {
-        // we can reuse some!
-        const f = assert_exists(trimmed_fields[index], `Field at index ${index} doesn\'t exist so you probably messed up near this assertion!`)
-        await input.text.set(f)
-      }
+    const trimmed_fields = (fields.length === 0 ? [''] : fields).map((f) => f.trim())
+    const existing_inputs = [...this.inputs]
+
+    for (let index = 0; index < Math.min(existing_inputs.length, trimmed_fields.length); index++) {
+      const input = assert_exists(existing_inputs[index])
+      const f = assert_exists(trimmed_fields[index], `Field at index ${index} doesn\'t exist so you probably messed up near this assertion!`)
+      await input.text.set(f)
+    }
+
+    while (this.inputs.size() > trimmed_fields.length && this.inputs.size() > 1) {
+      this.inputs.at(this.inputs.size() - 1)?.remove()
     }
 
     if (this.inputs.size() < trimmed_fields.length) {

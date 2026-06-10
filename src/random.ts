@@ -34,7 +34,7 @@ export class Random {
     assert_consistent_float_bounds(bounds)
     const min = bounds.lower
     const max = bounds.upper
-    return this.rand() * (max - min + 1) + min
+    return this.rand() * (max - min) + min
   }
 
   integer(bounds: { lower: number, upper: number } = Random.default_int_bounds) {

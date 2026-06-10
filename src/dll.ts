@@ -168,8 +168,6 @@ export class DLL<D> {
       : this.insert_after(element.prev, to_insert)
 
     if (DLL.check_invariants) {
-      assert(this.contains(to_insert))
-      const to_insert_element = assert_exists([...this.data_containers_set(to_insert)][0])
       assert(element === undefined || element.prev === to_insert_element, 'element\'s prev element is not to_insert!')
       assert(element === to_insert_element.next, 'to_insert\'s next element is not element')
       this.assert_invariants()
@@ -320,4 +318,3 @@ export class DLL<D> {
     }
   }
 }
-

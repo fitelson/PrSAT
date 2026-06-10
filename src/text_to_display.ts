@@ -610,18 +610,20 @@ const display_polynomial_term = (c: number, degree: number): Node => {
 const display_polynomial = (coefficients: number[]): Node => {
   const cs = coefficients
   const final_node = math_el('mrow', {})
-  for (const [index, c] of cs.entries()) {
-    const degree = cs.length - index - 1
-    if (c === 0) {
-      continue
-    }
+  const terms = cs
+    .map((c, index) => ({ c, degree: cs.length - index - 1 }))
+    .filter(({ c }) => c !== 0)
 
-    const term = display_polynomial_term(c, degree)
-    final_node.appendChild(term)
+  if (terms.length === 0) {
+    return math_el('mn', {}, '0')
+  }
 
-    if (index !== cs.length - 1) {
-      const p = math_el('mo', {}, '+')
-      final_node.appendChild(p)
+  for (const [index, { c, degree }] of terms.entries()) {
+    if (index === 0) {
+      final_node.appendChild(display_polynomial_term(c, degree))
+    } else {
+      final_node.appendChild(math_el('mo', {}, c < 0 ? '-' : '+'))
+      final_node.appendChild(display_polynomial_term(Math.abs(c), degree))
     }
   }
   return final_node
@@ -1104,13 +1106,15 @@ const timeout = (timeout_ms: Editable<number>) => {
   const si = tel(TestId.timeout.seconds, 'input', { style: 'margin-right: 0.5ch; width: 5ch;', type: 'number', min: MIN_SECS.toString(), max: MAX_SECS.toString(), value: default_secs.toString() }) as HTMLInputElement
 
   const set_timeout_ms = () => {
-    const s = parseInt(si.value)
+    const parsed = parseInt(si.value)
+    const s = Number.isFinite(parsed) ? parsed : default_secs
     timeout_ms.set(s * 1000)
   }
 
   si.onchange = () => {
     const parsed = parseInt(si.value)
-    const value = Math.max(MIN_SECS, Math.min(parsed, MAX_SECS))
+    const bounded = Number.isFinite(parsed) ? parsed : default_secs
+    const value = Math.max(MIN_SECS, Math.min(bounded, MAX_SECS))
     si.value = value.toString()
     set_timeout_ms()
   }
@@ -1217,7 +1221,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
   const set_all_constraints = (all_constraints: Constraint[] | undefined) => {
     // console.log('on_ready', all_constraints?.map(constraint_to_string))
     invalidate()
-    if (all_constraints === undefined) {
+    if (all_constraints === undefined || all_constraints.length === 0) {
       generate_button.disabled = true
     } else {
       generate_button.disabled = false
@@ -1349,7 +1353,8 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
     cancel_button.onclick = () => {
       const state = state2.get()
       if (state.tag !== 'looking') {
-        throw new Error(`Trying to cancel while not looking for a model!\nstate: ${JSON.stringify(state)}`)
+        cancel_button.disabled = true
+        return
       }
       cancel(state.abort_controller)
     }
@@ -1421,6 +1426,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
       // const result = await pr_sat_with_options(ctx, truth_table, constraints, { regular: is_regular, timeout_ms: timeout_ms.get() })
       const result = await pr_sat_wrapped(solver, truth_table, constraints, {
         regular: is_regular,
+        timeout_ms: timeout_ms.get(),
         abort_signal: abort_controller.signal,
         cancel_fallback,
         onTranslated: (translated) => {
@@ -1463,18 +1469,15 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
       if (result.solver_output.status === 'sat') {
         const save_table_image_button = el('input', { type: 'button', value: 'Save table as image' }) as HTMLButtonElement
         save_table_image_button.onclick = async () => {
+          const originalPadding = model_container.style.paddingBottom
           try {
             // Add temporary padding to prevent cutoff
-            const originalPadding = model_container.style.paddingBottom
             model_container.style.paddingBottom = '20px'
 
             const dataUrl = await htmlToImage.toPng(model_container, {
               backgroundColor: '#ffffff',
               pixelRatio: 2, // Higher quality
             })
-
-            // Restore original padding
-            model_container.style.paddingBottom = originalPadding
 
             const a = document.createElement('a')
             a.href = dataUrl
@@ -1485,6 +1488,8 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
           } catch (e: any) {
             console.error('Failed to save table as image:', e)
             alert('Failed to save table: ' + e.message)
+          } finally {
+            model_container.style.paddingBottom = originalPadding
           }
         }
         save_table_image_button.style.marginTop = '0.4em'
@@ -1494,10 +1499,8 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
       constraints_view.insertBefore(result_save_button_bar, constraints_view.firstChild)
     }
     catch (e: any) {
+      state_display.innerHTML = ''
       state2.set({ tag: 'exception', message: e.message })
-      status_container.appendChild(el('div', { style: 'color: red;' },
-        tel(TestId.exception_id, 'div', {}, 'Exception!'),
-        e.message))
       console.error(e.stack)
     }
   }
@@ -1580,6 +1583,10 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
 
     model_part.classList.remove('invalidated')
     cancel_button.disabled = true
+    regular_toggle.disabled = state.tag === 'looking'
+    for (const input of timeout_input.getElementsByTagName('input')) {
+      input.disabled = state.tag === 'looking'
+    }
     if (state.tag === 'waiting') {
       right_side.innerHTML = ''
       state_display.innerHTML = ''
@@ -1625,6 +1632,10 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
       state_display.append('No up-to-date model to display')
       model_part.classList.add('invalidated')
     } else if (state.tag === 'exception') {
+      state_display.innerHTML = ''
+      state_display.appendChild(el('span', { style: 'color: red;' },
+        tel(TestId.exception_id, 'span', {}, 'Exception! '),
+        state.message))
       generate_button.disabled = false
     } else {
       fallthrough('model_finder_display.state.watch', state)
@@ -1801,8 +1812,22 @@ const main = (): HTMLElement => {
     global_error_display.style.display = 'block'
   }
 
+  const unknown_error_to_string = (error: unknown): string => {
+    if (error instanceof Error) {
+      return error.message
+    } else if (typeof error === 'string') {
+      return error
+    } else {
+      try {
+        return JSON.stringify(error)
+      } catch {
+        return String(error)
+      }
+    }
+  }
+
   window.onunhandledrejection = (event) => {
-    show_error(JSON.stringify(event.reason))
+    show_error(unknown_error_to_string(event.reason))
   }
 
   window.onerror = (event, source, lineno, colno, error) => {

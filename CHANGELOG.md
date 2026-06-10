@@ -2,6 +2,34 @@
 
 > **Note:** This is a local build for deployment to fitelson.org.
 
+## 2026-06-10
+
+### Fixed: Soundness and Runtime Bugs from June 2026 Review
+
+- Fixed SMT-LIB emission for nested constraint-level conditionals so `=>` stays binary instead of being flattened into an invalid n-ary/right-association shape.
+- Fixed nested subtraction and division emission so right operands are preserved instead of being flattened into left-associative n-ary arithmetic.
+- Reworked exponentiation support: integer literal powers are expanded to multiplication/division before reaching Z3, while unsupported non-integer exponents fail with a clear error.
+- Fixed parser backtracking for chained sentence/constraint connectives by replacing repeated alternatives with right-associative chain parsing.
+- Preserved exact numeric literal source text for large/precise literals so SMT-LIB output no longer silently rounds values or emits JS scientific notation.
+- Scoped conditional-probability denominator guards to their logical context instead of globally hoisting `Pr(Y) != 0` assertions under disjunction/conditional/biconditional contexts.
+- Declared and evaluated free real variables in solver/evaluator paths, and skipped non-state real declarations during probability-table model extraction.
+- Added Z3 native timeout support to the live wrapped solver path.
+
+### Fixed: UI, Input, Display, and Data-Structure Bugs
+
+- Fixed timeout clearing, stale exception/status display, repeated cancel clicks, disabled solve options during active solves, empty-constraint Find Model enablement, save-table-image padding restoration, and global unhandled-rejection messages.
+- Fixed batch/file input synchronization, repeated load of the same file, clipboard error handling, stale async display output after edits/removals, focused-row removal, and redundant focus churn.
+- Fixed rational model stringification, root polynomial exponent/trailing-zero handling, displayed polynomial signs, exact S-expression matching, abortable sleep cleanup, `EditableDLL.watch_remove`, duplicate-data `DLL.insert_before`, and bounded random floats.
+
+### Changed: Build, Deploy, and Documentation
+
+- `npm run build` now refreshes bundled Z3 WASM/JS assets before TypeScript/Vite build.
+- `npm run deploy` now uploads `dist/.` so dotfiles such as `.htaccess` are included.
+- Production `.htaccess` now caches JS/CSS/WASM assets aggressively while keeping HTML fresh.
+- Updated README clone URL, in-app help text, project webpage syntax/results text, and removed the stale Vite favicon link.
+- Added regression tests for the critical SMT-LIB soundness failures, parser/numeric-literal fixes, model parsing/display helpers, S-expression matching, and input focus behavior.
+- Verification: `npm run build` passes; `npx vitest --run` passes with 585 tests passing and 1 skipped.
+
 ## 2026-04-18 (later)
 
 ### Upgraded: z3-solver 4.15.4 → 4.16.0

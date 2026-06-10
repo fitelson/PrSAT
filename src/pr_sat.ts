@@ -21,9 +21,9 @@ const { letter, val, not, and } = sentence_builder
 // const { letter, value: val, negation: not, conjunction: and } = PrSatFuncs.inits.Sentence
 
 export const real_expr_builder = {
-  lit: (value: number): RealExprMap['literal'] => {
+  lit: (value: number, source?: string): RealExprMap['literal'] => {
     assert(value >= 0, `RealExpr literal initialized with a negative value '${value}'!`)
-    return ({ tag: 'literal', value })
+    return ({ tag: 'literal', value, ...(source === undefined ? {} : { source }) })
   },
   vbl: (id: string): RealExprMap['variable'] => ({ tag: 'variable', id }),
   svs: (indices: number[]): RealExprMap['state_variable_sum'] => ({ tag: 'state_variable_sum', indices }),
@@ -52,7 +52,7 @@ export const constraint_builder = {
   cimp: (left: Constraint, right: Constraint): Constraint => ({ tag: 'conditional', left, right }),
   ciff: (left: Constraint, right: Constraint): Constraint => ({ tag: 'biconditional', left, right }),
 }
-const { gt, gte, eq, cnot, lte, lt } = constraint_builder
+const { gt, gte, eq, cnot, lte, lt, cand, cor } = constraint_builder
 
 // https://stackoverflow.com/questions/9939760/how-do-i-convert-an-integer-to-binary-in-javascript
 const to_bin_str = (n: number) => (n >>> 0).toString(2)
@@ -480,7 +480,10 @@ const letters_in_constraint = (constraint: Constraint, letters: VariableLists = 
 
 // Will modify letters array.
 const letters_in_real_expr = (expr: RealExpr, letters: VariableLists): VariableLists => {
-  if (expr.tag === 'literal' || expr.tag === 'variable' || expr.tag === 'state_variable_sum') {
+  if (expr.tag === 'literal' || expr.tag === 'state_variable_sum') {
+    return letters
+  } else if (expr.tag === 'variable') {
+    letters.real.push(expr.id)
     return letters
   } else if (expr.tag === 'probability') {
     return { real: letters.real, sentence: letters_in_sentence(expr.arg, letters.sentence) }
@@ -488,7 +491,8 @@ const letters_in_real_expr = (expr: RealExpr, letters: VariableLists): VariableL
     const al = letters_in_sentence(expr.arg, letters.sentence)
     return { real: letters.real, sentence: letters_in_sentence(expr.given, al) }
   } else if (expr.tag === 'power') {
-    return letters_in_real_expr(expr.base, letters)
+    const bl = letters_in_real_expr(expr.base, letters)
+    return letters_in_real_expr(expr.exponent, bl)
   } else if (expr.tag === 'negative') {
     return letters_in_real_expr(expr.expr, letters)
   } else if (expr.tag === 'divide') {
@@ -630,7 +634,7 @@ const real_expr_to_gen_string = (expr: RealExpr, s2s: (s: Sentence) => string): 
   }
 
   if (expr.tag === 'literal') {
-    return expr.value.toString()
+    return expr.source ?? expr.value.toString()
   } else if (expr.tag === 'variable') {
     return expr.id
   } else if (expr.tag === 'probability') {
@@ -803,13 +807,68 @@ export const div0_conditions_in_real_expr = (expr: RealExpr): Constraint[] => {
   }
 }
 
-const find_div0_conditions_in_constraints = (constraints: Constraint[]): Constraint[] => {
-  const cs: Constraint[] = []
-  for (const c of constraints) {
-    const div0_conditions = div0_conditions_in_single_constraint(c)
-    cs.push(...div0_conditions)
+const conjunction_or_single = (constraints: Constraint[]): Constraint | undefined => {
+  if (constraints.length === 0) {
+    return undefined
   }
-  return cs
+  return constraints.reduceRight((right, left) => cand(left, right))
+}
+
+const with_definedness = (defined: Constraint[], constraint: Constraint): Constraint => {
+  const defined_constraint = conjunction_or_single(defined)
+  return defined_constraint === undefined ? constraint : cand(defined_constraint, constraint)
+}
+
+const div0_definedness_in_constraint = (constraint: Constraint): Constraint[] => {
+  if (
+    constraint.tag === 'equal' ||
+    constraint.tag === 'not_equal' ||
+    constraint.tag === 'less_than' ||
+    constraint.tag === 'less_than_or_equal' ||
+    constraint.tag === 'greater_than' ||
+    constraint.tag === 'greater_than_or_equal'
+  ) {
+    return [...div0_conditions_in_real_expr(constraint.left), ...div0_conditions_in_real_expr(constraint.right)]
+  } else if (constraint.tag === 'negation') {
+    return div0_definedness_in_constraint(constraint.constraint)
+  } else if (
+    constraint.tag === 'conjunction' ||
+    constraint.tag === 'disjunction' ||
+    constraint.tag === 'conditional' ||
+    constraint.tag === 'biconditional'
+  ) {
+    return [...div0_definedness_in_constraint(constraint.left), ...div0_definedness_in_constraint(constraint.right)]
+  } else {
+    return fallthrough('div0_definedness_in_constraint', constraint)
+  }
+}
+
+const guard_div0_conditions_in_constraint = (constraint: Constraint): Constraint => {
+  const sub = guard_div0_conditions_in_constraint
+  if (
+    constraint.tag === 'equal' ||
+    constraint.tag === 'not_equal' ||
+    constraint.tag === 'less_than' ||
+    constraint.tag === 'less_than_or_equal' ||
+    constraint.tag === 'greater_than' ||
+    constraint.tag === 'greater_than_or_equal'
+  ) {
+    return with_definedness(div0_definedness_in_constraint(constraint), constraint)
+  } else if (constraint.tag === 'negation') {
+    return with_definedness(div0_definedness_in_constraint(constraint.constraint), cnot(constraint.constraint))
+  } else if (constraint.tag === 'conjunction') {
+    return cand(sub(constraint.left), sub(constraint.right))
+  } else if (constraint.tag === 'disjunction') {
+    return cor(sub(constraint.left), sub(constraint.right))
+  } else if (constraint.tag === 'conditional') {
+    return cor(cnot(sub(constraint.left)), sub(constraint.right))
+  } else if (constraint.tag === 'biconditional') {
+    const left = sub(constraint.left)
+    const right = sub(constraint.right)
+    return cand(cor(cnot(left), right), cor(cnot(right), left))
+  } else {
+    return fallthrough('guard_div0_conditions_in_constraint', constraint)
+  }
 }
 
 export const combine_inverse = (svs1: RealExprMap['state_variable_sum'], svs2: RealExprMap['state_variable_sum']): RealExpr => {
@@ -941,8 +1000,7 @@ export const eliminate_state_variable_index_in_constraint_or_real_expr = (n_stat
 export const enrich_constraints = (tt: TruthTable, index_to_eliminate: number | undefined, regular: boolean, constraints: Constraint[]): Constraint[] => {
   return [
     ...probability_constraints(tt, index_to_eliminate, regular),
-    ...find_div0_conditions_in_constraints(constraints),
-    ...constraints,
+    ...constraints.map(guard_div0_conditions_in_constraint),
   ]
 }
 
@@ -950,7 +1008,7 @@ const translate_constraints_to_smtlib = (tt: TruthTable, index_to_eliminate: num
   const smtlib_lines: S[] = []
   smtlib_lines.push(['set-logic', 'QF_NRA'])
 
-  for (const rv of tt.variables.real.entries()) {
+  for (const rv of tt.variables.real) {
     const declaration = ['declare-const', rv, 'Real']
     smtlib_lines.push(declaration)
   }
@@ -1232,7 +1290,7 @@ export const constraint_to_smtlib = (constraint: Constraint): S => {
   } else if (constraint.tag === 'disjunction') {
     return ['or', ...flatten_constraint_children(constraint.tag, constraint.left), ...flatten_constraint_children(constraint.tag, constraint.right)]
   } else if (constraint.tag === 'conditional') {
-    return ['=>', constraint_to_smtlib(constraint.left), ...flatten_constraint_children(constraint.tag, constraint.right)]
+    return ['=>', constraint_to_smtlib(constraint.left), constraint_to_smtlib(constraint.right)]
   } else if (constraint.tag === 'biconditional') {
     return ['=', constraint_to_smtlib(constraint.left), constraint_to_smtlib(constraint.right)]
   } else if (constraint.tag === 'equal') {
@@ -1257,23 +1315,70 @@ export const state_index_id = (state_index: number): string => {
 }
 
 export const real_expr_to_smtlib = (expr: RealExpr): S => {
-  const flatten_children = (tag: 'plus' | 'multiply' | 'minus' | 'divide', constraint: RealExpr, acc: S[] = []): S[] => {
+  const flatten_children = (tag: 'plus' | 'multiply', constraint: RealExpr, acc: S[] = []): S[] => {
     if (constraint.tag === tag) {
-      if (constraint.tag === 'divide') {
-        const lc = flatten_children(tag, constraint.numerator, acc)
-        return flatten_children(tag, constraint.denominator, lc)
-      } else {
-        const lc = flatten_children(tag, constraint.left, acc)
-        return flatten_children(tag, constraint.right, lc)
-      }
+      const lc = flatten_children(tag, constraint.left, acc)
+      return flatten_children(tag, constraint.right, lc)
     } else {
       acc.push(real_expr_to_smtlib(constraint))
       return acc
     }
   }
 
+  const literal_to_smtlib = (literal: RealExprMap['literal']): string => literal.source ?? literal.value.toString()
+
+  const flatten_left_assoc_subtraction = (expr: RealExpr): S[] => {
+    if (expr.tag === 'minus') {
+      return [...flatten_left_assoc_subtraction(expr.left), real_expr_to_smtlib(expr.right)]
+    }
+    return [real_expr_to_smtlib(expr)]
+  }
+
+  const flatten_left_assoc_division = (expr: RealExpr): S[] => {
+    if (expr.tag === 'divide') {
+      return [...flatten_left_assoc_division(expr.numerator), real_expr_to_smtlib(expr.denominator)]
+    }
+    return [real_expr_to_smtlib(expr)]
+  }
+
+  const literal_integer_value = (literal: RealExprMap['literal']): number | undefined => {
+    if (!Number.isSafeInteger(literal.value)) {
+      return undefined
+    }
+    return literal.value
+  }
+
+  const power_to_smtlib = (base: RealExpr, exponent: RealExpr): S => {
+    const base_s = real_expr_to_smtlib(base)
+    const product = (factors: S[]): S => {
+      if (factors.length === 0) {
+        return '1'
+      } else if (factors.length === 1) {
+        return factors[0]
+      } else {
+        return ['*', ...factors]
+      }
+    }
+
+    let exp: number | undefined
+    if (exponent.tag === 'literal') {
+      exp = literal_integer_value(exponent)
+    } else if (exponent.tag === 'negative' && exponent.expr.tag === 'literal') {
+      const positive = literal_integer_value(exponent.expr)
+      exp = positive === undefined ? undefined : -positive
+    }
+
+    if (exp === undefined) {
+      throw new Error('Exponentiation in solver input requires an integer literal exponent.')
+    }
+    if (exp < 0) {
+      return ['/', '1', product(Array.from({ length: -exp }, () => base_s))]
+    }
+    return product(Array.from({ length: exp }, () => base_s))
+  }
+
   if (expr.tag === 'literal') {
-    return expr.value.toString()
+    return literal_to_smtlib(expr)
   } else if (expr.tag === 'variable') {
     return expr.id
   } else if (expr.tag === 'negative') {
@@ -1282,8 +1387,7 @@ export const real_expr_to_smtlib = (expr: RealExpr): S => {
     // I should probably use a result type for this but I don't want to 😭.
     throw new Error('Unable to convert a probability or a given_probability to an SMTLIB S-expression!  Did you forget to call translate_*?')
   } else if (expr.tag === 'power') {
-    // throw new Error('Unable to convert a power to an SMTLIB S-expression!  Did you forget to call translate_*?')
-    return ['^', real_expr_to_smtlib(expr.base), real_expr_to_smtlib(expr.exponent)]
+    return power_to_smtlib(expr.base, expr.exponent)
   } else if (expr.tag === 'state_variable_sum') {
     if (expr.indices.length === 0) {
       return '0'
@@ -1295,11 +1399,11 @@ export const real_expr_to_smtlib = (expr: RealExpr): S => {
   } else if (expr.tag === 'plus') {
     return ['+', ...flatten_children(expr.tag, expr.left), ...flatten_children(expr.tag, expr.right)]
   } else if (expr.tag === 'minus') {
-    return ['-', ...flatten_children(expr.tag, expr.left), real_expr_to_smtlib(expr.right)]
+    return ['-', ...flatten_left_assoc_subtraction(expr.left), real_expr_to_smtlib(expr.right)]
   } else if (expr.tag === 'multiply') {
     return ['*', ...flatten_children(expr.tag, expr.left), ...flatten_children(expr.tag, expr.right)]
   } else if (expr.tag === 'divide') {
-    return ['/', ...flatten_children(expr.tag, expr.numerator), real_expr_to_smtlib(expr.denominator)]
+    return ['/', ...flatten_left_assoc_division(expr.numerator), real_expr_to_smtlib(expr.denominator)]
     // return ['div', ...flatten_children(expr.tag, expr.numerator), real_expr_to_smtlib(expr.denominator)]
   } else {
     throw new Error('real_expr_to_smtlib fallthrough')

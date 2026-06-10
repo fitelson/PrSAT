@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest'
-import { ModelAssignmentOutput, parse_to_assignment, poly_s, run_solve_cancel_logic } from './z3_integration'
+import { ModelAssignmentOutput, model_assignment_output_to_string, model_assignment_output_to_s, parse_to_assignment, poly_s, run_solve_cancel_logic } from './z3_integration'
 import { S } from './s'
 import { sleep } from './utils'
 
@@ -104,6 +104,23 @@ describe('parse_to_assignment', () => {
       const expected: ModelAssignmentOutput = { tag: 'generic-root-obj', degree: 2, coefficients: [-1, 1, 1], index: 1 }
       expect(parsed).toEqual(expected)
     })
+    test('trailing zero coefficients', () => {
+      const s: S = ['root-obj', ['+', ['^', 'x', '2']], '1']
+      const parsed = parse_to_assignment(s)
+      const expected: ModelAssignmentOutput = { tag: 'generic-root-obj', degree: 2, coefficients: [1, 0, 0], index: 1 }
+      expect(parsed).toEqual(expected)
+    })
+  })
+})
+
+describe('model assignment display helpers', () => {
+  test('rational denominator stringifies recursively', () => {
+    const output: ModelAssignmentOutput = { tag: 'rational', numerator: { tag: 'literal', value: 3 }, denominator: { tag: 'literal', value: 16 } }
+    expect(model_assignment_output_to_string(output)).toEqual('3 / 16')
+  })
+  test('generic root serialization uses the correct exponents', () => {
+    const output: ModelAssignmentOutput = { tag: 'generic-root-obj', index: 1, degree: 2, coefficients: [1, 0, 0] }
+    expect(model_assignment_output_to_s(output)).toEqual(['root-obj', ['+', ['*', 1, ['^', 'x', 2]], ['*', 0, 'x'], 0], 1])
   })
 })
 
