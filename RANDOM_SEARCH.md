@@ -125,7 +125,15 @@ Still-open cheap win: report "numerically SAT (uncertified)" with the float
 model and per-constraint residuals when optimization converges but
 certification fails, instead of a bare `unknown`.
 
-## Implemented (2026-06-12, latest): Web Worker + permanent install
+## Implemented (2026-06-12, latest): pretty witnesses only
+
+Models are accepted only when every denominator is ≤ 10,000
+(`DEFAULT_MAX_MODEL_DENOMINATOR` in random_search.ts); continued fractions are
+bounded to coarse tolerances; literals carry exact digit strings past 2^53.
+The 3-wise-independence benchmark now yields the canonical all-eighths XOR
+witness instead of a ~10^30-denominator monster.
+
+## Implemented (2026-06-12, earlier): Web Worker + permanent install
 
 Random Search runs in a Web Worker (no page freezes, instant Cancel); the
 cross-multiplication conversion is capped at 20k terms (oversized equations

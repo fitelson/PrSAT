@@ -49,6 +49,9 @@ describe('maple bridge end-to-end', () => {
     if (result.solver_output.status === 'sat') {
       const sa = result.solver_output.state_assignments as any
       console.log('INDEP MODEL:', Object.entries(sa).map(([k,v]) => `a_${Number(k)+1}=${fmt(v)}`).join(' '))
+      // Pretty witnesses only: every denominator within the prettiness bound.
+      const max_den = Object.values(result.rational_model!).reduce((m, v) => v.d > m ? v.d : m, 1n)
+      expect(max_den <= 10_000n).toBe(true)
     }
     expect(result.solver_output.status).toBe('sat')
   }, 600_000)

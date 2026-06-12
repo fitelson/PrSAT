@@ -49,7 +49,7 @@ export const init_z3 = async (): Promise<Z3HighLevel & Z3LowLevel> => {
 // }
 
 export type ModelAssignmentOutput =
-  | { tag: 'literal', value: number }
+  | { tag: 'literal', value: number, source?: string }  // source: exact digits when value exceeds float precision
   | { tag: 'negative', inner: ModelAssignmentOutput }
   | { tag: 'rational', numerator: ModelAssignmentOutput, denominator: ModelAssignmentOutput }
   | { tag: 'root-obj', index: number, a: ModelAssignmentOutput, b: ModelAssignmentOutput, c: ModelAssignmentOutput }
@@ -226,7 +226,7 @@ export const model_assignment_output_to_string = (output: ModelAssignmentOutput)
   }
 
   if (output.tag === 'literal') {
-    return output.value.toString()
+    return (output.source ?? output.value.toString())
   } else if (output.tag === 'negative') {
     return `-${wrap(output.inner)}`
   } else if (output.tag === 'rational') {

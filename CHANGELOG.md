@@ -4,6 +4,16 @@
 
 ## 2026-06-12
 
+### Changed: pretty witnesses only
+
+Random Search no longer returns ugly-but-exact models (Branden's rule). On the 16-state 3-wise-independence system, certification previously fell through to fine-tolerance continued fractions, producing exact models with ~10^30 denominators (displayed lossily through floats, e.g. "3.19e+29/6.51e+30"). Now:
+
+- **Prettiness gate** (`is_pretty_model`): a model is only accepted when every state value's denominator is ≤ 10,000 (`DEFAULT_MAX_MODEL_DENOMINATOR`); otherwise the search continues.
+- Continued-fraction rationalization is bounded to COARSE tolerances (12 halvings from 1/4) on all certification paths — fine tolerances only produced gate-rejected candidates.
+- **Exact display**: `ModelAssignmentOutput` literals now carry exact digit strings (`source`) when the value exceeds 2^53, so big numbers can never again be rendered through lossy floats (display + to_string paths).
+
+Result on the independence system via the bridge: the canonical XOR witness — 1/8 on each state where U matches the parity of X,Y,Z, 0 elsewhere — max denominator 8, in ~9s.
+
 ### Added: Web Worker execution + permanent local install
 
 - **Random Search now runs in a Web Worker** (`src/random_search_worker.ts`), like Z3: translation, equation elimination, Gröbner, Maple-branch search, Nelder-Mead, and exact verification all happen off the main thread. No constraint system can freeze the page; Cancel is a clean `worker.terminate()`. The exact rational model crosses the worker boundary as plain data (`rational_model` on the result) and the main thread rebuilds the model evaluator from it.

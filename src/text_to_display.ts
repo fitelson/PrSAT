@@ -755,7 +755,7 @@ const model_assignment_display = (ma: ModelAssignmentOutput): Node => {
   }
   const sub = (ma: ModelAssignmentOutput): Node => {
     if (ma.tag === 'literal') {
-      return math_el('mi', {}, ma.value.toString())
+      return math_el('mi', {}, ma.source ?? ma.value.toString())
     } else if (ma.tag === 'negative') {
       return math_el('mrow', {}, math_el('mo', {}, '-'), sub(ma.inner))
     } else if (ma.tag === 'rational') {

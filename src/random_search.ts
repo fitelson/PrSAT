@@ -77,6 +77,18 @@ export const DEFAULT_MAX_RATIONALIZE_ATTEMPTS = 40
 // at least the margin (1e-6), three orders of magnitude above this.
 export const NUMERIC_ACCEPT_EPS = 1e-9
 
+// Models are only accepted when every state value's denominator is at most
+// this bound — Branden's rule: never return an ugly-but-exact witness; keep
+// searching for a pretty one instead.
+export const DEFAULT_MAX_MODEL_DENOMINATOR = 10_000n
+
+const is_pretty_model = (full: Record<number, Rational>, max_den: bigint = DEFAULT_MAX_MODEL_DENOMINATOR): boolean => {
+  for (const v of Object.values(full)) {
+    if (v.d > max_den) return false
+  }
+  return true
+}
+
 export type RandomSearchOptions = {
   regular: boolean
   search_attempts: number
@@ -162,19 +174,26 @@ export const sample_dirichlet_ones = (random: Random, n: number): number[] => {
 
 // ---------- Rational → ModelAssignmentOutput ----------
 
+const bigint_literal_output = (n: bigint): ModelAssignmentOutput => {
+  const value = Number(n)
+  // Past 2^53 the float is lossy: carry the exact digits for display.
+  return Number.isSafeInteger(value)
+    ? { tag: 'literal', value }
+    : { tag: 'literal', value, source: n.toString() }
+}
+
 export const rational_to_model_assignment = (r: Rational): ModelAssignmentOutput => {
   if (r.n === 0n) return { tag: 'literal', value: 0 }
   if (r.d === 1n) {
-    const v = Number(r.n < 0n ? -r.n : r.n)
-    const pos: ModelAssignmentOutput = { tag: 'literal', value: v }
+    const pos = bigint_literal_output(r.n < 0n ? -r.n : r.n)
     return r.n < 0n ? { tag: 'negative', inner: pos } : pos
   }
   const neg = r.n < 0n
   const abs_n = neg ? -r.n : r.n
   const frac: ModelAssignmentOutput = {
     tag: 'rational',
-    numerator: { tag: 'literal', value: Number(abs_n) },
-    denominator: { tag: 'literal', value: Number(r.d) },
+    numerator: bigint_literal_output(abs_n),
+    denominator: bigint_literal_output(r.d),
   }
   return neg ? { tag: 'negative', inner: frac } : frac
 }
@@ -323,6 +342,7 @@ const search_maple_branch = async (
   if (k === 0) {
     const full = evaluate_full({})
     if (full === undefined) return undefined
+    if (!is_pretty_model(full)) return undefined
     const verify = verify_rational_model(enriched, full)
     return verify.tag === 'ok' && verify.value ? { assignments: full, attempts: 0, fmin: -1 } : undefined
   }
@@ -348,6 +368,7 @@ const search_maple_branch = async (
       }
       const full = evaluate_full(free_values)
       if (full === undefined) return undefined
+      if (!is_pretty_model(full)) return undefined  // pretty witnesses only
       const verify = verify_rational_model(enriched, full)
       return verify.tag === 'ok' && verify.value ? full : undefined
     }
@@ -367,12 +388,13 @@ const search_maple_branch = async (
       const full = try_free(rs)
       if (full !== undefined) return { assignments: full, attempts: attempt, fmin: result.fMin }
     }
+    // Coarse continued fractions only — fine tolerances yield ugly models
+    // the prettiness gate rejects.
     let tol = 0.25
-    for (let i = 0; i < opts.max_rationalize_attempts; i++) {
+    for (let i = 0; i < Math.min(opts.max_rationalize_attempts, 12); i++) {
       const full = try_free(x_best.map((x) => rationalize(x, tol)))
       if (full !== undefined) return { assignments: full, attempts: attempt, fmin: result.fMin }
       tol /= 2
-      if (tol === 0) break
     }
   }
   return undefined
@@ -615,6 +637,7 @@ const try_rationalize_reconstruct_verify = async (
     }
     const full = reconstruct_full_assignment(elimination, free_values)
     if (full === undefined) return undefined  // generic-branch denominator vanished
+    if (!is_pretty_model(full)) return undefined  // pretty witnesses only
     const verify = verify_rational_model(enriched_constraints, full)
     return verify.tag === 'ok' && verify.value ? full : undefined
   }
@@ -739,6 +762,7 @@ const try_rationalize_reconstruct_verify = async (
             if (full[i] !== undefined && r_sign(full[i]!) < 0) { complete = false; break }
           }
           if (!complete) continue
+          if (!is_pretty_model(full)) continue  // pretty witnesses only
           const verify = verify_rational_model(enriched_constraints, full)
           if (verify.tag === 'ok' && verify.value) return full
         }
@@ -746,14 +770,15 @@ const try_rationalize_reconstruct_verify = async (
     }
   }
 
-  // Pass 3: continued fractions, coarse-to-fine.
+  // Pass 3: continued fractions, COARSE tolerances only (fine tolerances
+  // produce huge denominators; those models are rejected by the prettiness
+  // gate anyway, so don't waste time generating them).
   let tol = 0.25
-  for (let i = 0; i < max_attempts; i++) {
+  for (let i = 0; i < Math.min(max_attempts, 12); i++) {
     if (!await breathe()) return undefined
     const full = attempt(xs.map((x) => rationalize(x, tol)))
     if (full !== undefined) return full
     tol /= 2
-    if (tol === 0) return undefined
   }
   return undefined
 }
