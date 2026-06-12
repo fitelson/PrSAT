@@ -6,7 +6,7 @@
 
 ### Added: Decimals toggle in Evaluate model
 
-New "Decimals" button to the right of Clear in the Evaluate model toolbar (ported from the 3.1 experimental fork). Toggles all evaluation results between exact values and 4-decimal-place approximations (e.g. 111/88 vs 1.2614); the button relabels to "Fractions" while decimals are shown. Quadratic-root values show their decimal approximation; higher-degree roots keep their exact display. Implemented via a `show_decimals` editable in `model_evaluators` (`src/text_to_display.ts`) and a new optional `extra_toolbar_buttons` parameter on `generic_input_block` (`src/block_playground.ts`). Verification: `npm run build` passes; `npx vitest --run` passes (585 tests, 1 skipped).
+New "Decimals" button to the right of Clear in the Evaluate model toolbar (ported from the 3.1 experimental fork). Toggles all evaluation results between exact values and 4-decimal-place approximations (e.g. 111/88 vs 1.2614); the button relabels to "Fractions" while decimals are shown. Quadratic-root values show their decimal approximation; higher-degree roots keep their exact display. Implemented via a `show_decimals` editable in `model_evaluators` (`src/text_to_display.ts`) and a new optional `extra_toolbar_buttons` parameter on `generic_input_block` (`src/block_playground.ts`). Verification: `npm run build` passes; `npx vitest --run` passes (585 tests, 1 skipped). Committed (3ff62b6), pushed, and deployed to fitelson.org on 2026-06-12.
 
 ## 2026-06-10
 
