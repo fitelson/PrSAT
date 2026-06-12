@@ -333,6 +333,7 @@ export const generic_input_block = <ParseOutput extends {}>(
   block: InputBlockLogic<ParseOutput, SplitInput>,
   batch_placeholder_text: string,
   test_ids: TestId.GenericMultiInputTestIds,
+  extra_toolbar_buttons: HTMLElement[] = [],
 ): InputBlock => {
   const batch_logic = new BatchInputLogic(block)
   const batch_block = batch_input_block(batch_logic, batch_placeholder_text, test_ids)
@@ -407,6 +408,7 @@ export const generic_input_block = <ParseOutput extends {}>(
         load_button,
         show_batch_button,
         clear_button,
+        ...extra_toolbar_buttons,
       ),
       batch_block.element,
     ),

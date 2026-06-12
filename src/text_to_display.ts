@@ -978,8 +978,41 @@ type ModelEvaluator = {
   refresh: () => void
 }
 
-const fancy_evaluator_result_to_display = (output: FancyEvaluatorOutput): Node => {
+// Numeric value of a model assignment, for decimal display. Undefined when no
+// float value is extractable (e.g. roots of degree > 2 polynomials).
+const model_assignment_to_number = (ma: ModelAssignmentOutput): number | undefined => {
+  if (ma.tag === 'literal') {
+    return ma.value
+  } else if (ma.tag === 'negative') {
+    const inner = model_assignment_to_number(ma.inner)
+    return inner === undefined ? undefined : -inner
+  } else if (ma.tag === 'rational') {
+    const n = model_assignment_to_number(ma.numerator)
+    const d = model_assignment_to_number(ma.denominator)
+    return n === undefined || d === undefined || d === 0 ? undefined : n / d
+  } else if (ma.tag === 'root-obj') {
+    const a = model_assignment_to_number(ma.a)
+    const b = model_assignment_to_number(ma.b)
+    const c = model_assignment_to_number(ma.c)
+    if (a === undefined || b === undefined || c === undefined) {
+      return undefined
+    }
+    return simplifyQuadraticRoot(a, b, c, ma.index).decimalValue
+  } else if (ma.tag === 'generic-root-obj' && ma.degree === 2) {
+    return simplifyQuadraticRoot(ma.coefficients[0], ma.coefficients[1], ma.coefficients[2], ma.index).decimalValue
+  } else {
+    return undefined
+  }
+}
+
+const fancy_evaluator_result_to_display = (output: FancyEvaluatorOutput, decimals: boolean = false): Node => {
   if (output.tag === 'result') {
+    if (decimals) {
+      const value = model_assignment_to_number(output.result)
+      if (value !== undefined) {
+        return math_el('mn', {}, value.toFixed(4))
+      }
+    }
     return model_assignment_display(output.result)
   } else if (output.tag === 'bool-result') {
     return math_el('mtext', {}, output.result ? '⊤' : '⊥')
@@ -1004,6 +1037,8 @@ const model_evaluators = (
   state_box: Editable<ModelFinderState2>,
   model_assignments: rEditable<{ truth_table: TruthTable, values: Record<number, ModelAssignmentOutput> } | undefined>,
 ): ModelEvaluator => {
+  const show_decimals = new Editable(false)
+
   const display_constraint_or_real_expr_with_evaluation = async (e: ConstraintOrRealExpr): Promise<Element> => {
     const d = display_constraint_or_real_expr(e, false)
     const assignments = model_assignments.get()
@@ -1034,7 +1069,7 @@ const model_evaluators = (
       // // const result = await fancy_evaluate_constraint_or_real_expr(z3_state.ctx, assignments.solver, assignments.truth_table, e)  // Could throw!
       // const result = await fancy_evaluate_constraint_or_real_expr(z3_state.ctx, assignments.model, assignments.truth_table, e)  // Could throw!
       // const result_html = constraint_to_real_expr_result_to_html(result)
-      const result_html = fancy_evaluator_result_to_display(result)
+      const result_html = fancy_evaluator_result_to_display(result, show_decimals.get())
       return math_el('math', {},
         d,
         math_el('mo', { class: 'yields' }, '⟾'),
@@ -1055,13 +1090,22 @@ const model_evaluators = (
     parse_constraint_or_real_expr,
     // (logic) => split_input(logic, display_constraint_or_real_expr_with_evaluation, Constants.EVALUATOR_INPUT_PLACEHOLDER, TestId.single_input.eval))
     (logic) => split_input(logic, display_constraint_or_real_expr_with_evaluation, Constants.EVALUATOR_INPUT_PLACEHOLDER, test_ids.split))
-  const mi = generic_input_block(eval_block, Constants.BATCH_EVALUATOR_INPUT_PLACEHOLDER, test_ids)
+  const decimals_button = el('input', { type: 'button', value: 'Decimals', style: 'margin-left: 0.4em;' }) as HTMLButtonElement
+  decimals_button.onclick = () => {
+    show_decimals.set(!show_decimals.get())
+  }
+  const mi = generic_input_block(eval_block, Constants.BATCH_EVALUATOR_INPUT_PLACEHOLDER, test_ids, [decimals_button])
 
   const refresh = async () => {
     for (const input of eval_block.get_inputs()) {
       await input.text.set(input.text.get())
     }
   }
+
+  show_decimals.watch((decimals) => {
+    decimals_button.value = decimals ? 'Fractions' : 'Decimals'
+    refresh().catch((e) => { console.error('decimals toggle refresh failed', e) })
+  })
 
   const element = el('div', { class: 'model-evaluators' },
     el('div', { style: 'margin-bottom: 0.4em;' }, 'Evaluate model'),
