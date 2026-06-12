@@ -4,6 +4,10 @@
 
 ## 2026-06-12
 
+### Verified: Regular mode on the independence benchmark
+
+With Regular checked (all a_i > 0), the 3-wise-independence system correctly excludes the all-eighths witness and finds a strictly positive pretty one: a_i ∈ {1/144, 17/144} — the 8/9 : 1/9 mixture of the XOR distribution with the uniform — max denominator 144, ~6s via the bridge, all constraints exactly verified under strict positivity. Both behaviors (non-regular → eighths; regular → 144ths) are bridge-gated regression tests in `src/maple_bridge.spec.ts`.
+
 ### Changed: pretty witnesses only
 
 Random Search no longer returns ugly-but-exact models (Branden's rule). On the 16-state 3-wise-independence system, certification previously fell through to fine-tolerance continued fractions, producing exact models with ~10^30 denominators (displayed lossily through floats, e.g. "3.19e+29/6.51e+30"). Now:
