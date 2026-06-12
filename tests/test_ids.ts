@@ -15,6 +15,7 @@ export const z3_status = 'z3-status'
 // export const single_input = test_id_generator('single-input')
 export const find_model = 'find-model'
 export const regular_toggle = 'regular-toggle'
+export const eliminate_ratios_toggle = 'eliminate-ratios-toggle'
 export const model_table = 'model-table'
 
 // export const single_input = readonly({

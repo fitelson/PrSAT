@@ -2,6 +2,17 @@
 
 > **Note:** This is a local build for deployment to fitelson.org.
 
+## 2026-06-12 (branch `prsat-3.1-eliminate-ratios`)
+
+### Added: "Eliminate ratios" solver option
+
+- New checkbox on the main interface (next to "Regular:"). When enabled, every translated constraint is rewritten so each atomic comparison has the form `N = 0`, `N ≠ 0`, `N > 0`, `N < 0`, `N ≥ 0`, or `N ≤ 0` with no division anywhere — all denominators are cleared by cross-multiplication before the problem reaches Z3. Products are deliberately NOT expanded into monomials; `N` keeps its compact factored form (full expansion blew up badly on likelihood-ratio constraints — ~50KB of SMT-LIB and an AST deep enough to crash the browser's recursive renderer; the structural form is ~2KB on the same input).
+- New module `src/eliminate_ratios.ts`: converts each comparison to a single symbolic rational function `N / (d_1 · … · d_k)` (sharing common denominator factors instead of blindly cross-multiplying) and emits `N op 0`. Denominator factors built from state-variable sums and nonnegative literals are provably nonnegative under the probability axioms (and nonzero under the existing div-0 guards), so they are dropped soundly from inequalities; denominators of unknown sign (e.g. free real variables) get an explicit sign case-split. For `=`/`≠` denominator signs are irrelevant given the guards.
+- Pipeline order: div-0 guards are derived from the division-containing form first, then ratio elimination runs before state-variable elimination (so denominators are still recognizably nonnegative sums).
+- Definedness guards now assert `den > 0` instead of `den ≠ 0` when the denominator is provably nonnegative (probabilities, state-variable sums, and sums/products/even powers thereof) — equivalent under the probability axioms but more direct for Z3. Unknown-sign denominators (free real variables) keep `≠ 0`. This applies to all solves, not just the eliminate-ratios mode.
+- The translated-constraints display and "Save translated constraints" output keep the familiar ratio form; the transformation affects only the solver input (visible via "Save SMTLIB input").
+- Tests: `src/eliminate_ratios.spec.ts` — transformation unit tests, a randomized 200-point equivalence check against the original constraints, a no-`/`-in-SMT-LIB check, and Z3 end-to-end SAT/UNSAT tests. Verification: `npm run build` passes; `npx vitest --run` passes with 600 tests passing and 1 skipped.
+
 ## 2026-06-10
 
 ### Fixed: Soundness and Runtime Bugs from June 2026 Review

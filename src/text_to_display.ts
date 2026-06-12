@@ -904,7 +904,7 @@ type ModelFinderDisplay = {
   element: HTMLElement
   state: rEditable<ModelFinderState2>
   // start_search: (ctx: Context, constraints: Constraint[], is_regular: boolean) => Promise<void>
-  start_search_solver: (solver: WrappedSolver, constraints: Constraint[], is_regular: boolean) => Promise<void>
+  start_search_solver: (solver: WrappedSolver, constraints: Constraint[], is_regular: boolean, is_eliminate_ratios: boolean) => Promise<void>
   invalidate: () => void
 }
 
@@ -1201,6 +1201,8 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
   const z3_status_container = tel(TestId.z3_status, 'div', { style: 'margin-bottom: 0.4em;' })
   const is_regular = new Editable(false)
   const regular_toggle = tel(TestId.regular_toggle, 'input', { type: 'checkbox', style: 'margin-left: 0.4em;' }, 'Regular') as HTMLInputElement
+  const is_eliminate_ratios = new Editable(false)
+  const eliminate_ratios_toggle = tel(TestId.eliminate_ratios_toggle, 'input', { type: 'checkbox', style: 'margin-left: 0.4em;' }, 'Eliminate ratios') as HTMLInputElement
   const timeout_ms = new Editable(Constants.DEFAULT_SOLVE_TIMEOUT_MS)
   const timeout_input = timeout(timeout_ms)
   timeout_ms.watch((ms) => { console.log('timeout set to:', ms) })
@@ -1212,6 +1214,10 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
       el('label', {},
         'Regular:',
         regular_toggle,
+      ),
+      el('label', {},
+        'Eliminate ratios:',
+        eliminate_ratios_toggle,
       ),
       el('label', { style: 'display: flex;' },
         el('span', { style: 'margin-right: 1ch;' }, 'Timeout:'),
@@ -1239,6 +1245,12 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
   })
   regular_toggle.addEventListener('change', () => {
     is_regular.set(regular_toggle.checked)
+  })
+  is_eliminate_ratios.watch(() => {
+    invalidate()
+  })
+  eliminate_ratios_toggle.addEventListener('change', () => {
+    is_eliminate_ratios.set(eliminate_ratios_toggle.checked)
   })
 
   // const load_z3 = async (): Promise<Context> => {
@@ -1350,7 +1362,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
     generate_button.addEventListener('click', async () => {
       assert(state2.get().tag !== 'looking', 'Trying to generate another model while looking for stuff!')
       const constraints = assert_exists(constraint_block.get_output(), 'Generate button clicked but not all constraints ready!')
-      await start_search_solver(solver, constraints, is_regular.get())
+      await start_search_solver(solver, constraints, is_regular.get(), is_eliminate_ratios.get())
     })
     cancel_button.onclick = () => {
       const state = state2.get()
@@ -1415,7 +1427,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
     console.log('cancel fallback (no reload)')
   }
 
-  const start_search_solver = async (solver: WrappedSolver, constraints: Constraint[], is_regular: boolean): Promise<void> => {
+  const start_search_solver = async (solver: WrappedSolver, constraints: Constraint[], is_regular: boolean, is_eliminate_ratios: boolean): Promise<void> => {
     const truth_table = new TruthTable(variables_in_constraints(constraints))
     // state.set({ tag: 'looking', truth_table })
     const abort_controller = new AbortController()
@@ -1429,6 +1441,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
       // const result = await pr_sat_with_options(ctx, truth_table, constraints, { regular: is_regular, timeout_ms: timeout_ms.get() })
       const result = await pr_sat_wrapped(solver, truth_table, constraints, {
         regular: is_regular,
+        eliminate_ratios: is_eliminate_ratios,
         timeout_ms: timeout_ms.get(),
         abort_signal: abort_controller.signal,
         cancel_fallback,

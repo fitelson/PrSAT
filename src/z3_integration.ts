@@ -2,6 +2,7 @@ import { Arith, Bool, Context, Expr, init, Model, Z3HighLevel, Z3LowLevel } from
 import { match_s, S, spv, clause, s_to_string, default_clause } from "./s"
 import { constraints_to_smtlib_lines, eliminate_state_variable_index, enrich_constraints, parse_s, real_expr_to_smtlib, translate, TruthTable, variables_in_constraints, state_index_id, constraint_to_smtlib, translate_constraint, translate_real_expr, free_variables_in_constraint_or_real_expr as free_sentence_variables_in_constraint_or_real_expr, LetterSet, free_real_variables_in_constraint_or_real_expr, VariableLists, div0_conditions_in_constraint_or_real_expr, translate_constraint_or_real_expr, eliminate_state_variable_index_in_constraint_or_real_expr } from "./pr_sat"
 import { ConstraintOrRealExpr, PrSat } from "./types"
+import { eliminate_ratios_in_constraints } from "./eliminate_ratios"
 import { as_array, assert, assert_exists, assert_result, fallthrough, Res, sleep } from "./utils"
 
 type RealExpr = PrSat['RealExpr']
@@ -628,6 +629,7 @@ export const constraint_to_bool = <CtxKey extends string>(ctx: Context<CtxKey>, 
 
 export type SolverOptions = {
   regular: boolean
+  eliminate_ratios: boolean
   timeout_ms: number
 }
 
@@ -644,6 +646,7 @@ export type SolverReturn<CtxKey extends string> =
 
 const DEFAULT_SOLVER_OPTIONS: SolverOptions = {
   regular: false,
+  eliminate_ratios: false,
   timeout_ms: 30_000,
 }
 
@@ -656,7 +659,7 @@ export const pr_sat_with_options = async <CtxKey extends string>(
   constraints: Constraint[],
   options?: Partial<SolverOptions>,
 ): Promise<SolverReturn<CtxKey>> => {
-  const { regular, timeout_ms } = { ...DEFAULT_SOLVER_OPTIONS, ...options }
+  const { regular, eliminate_ratios, timeout_ms } = { ...DEFAULT_SOLVER_OPTIONS, ...options }
   const { Solver } = ctx
   const solver = new Solver('QF_NRA');
   solver.set("timeout", timeout_ms)
@@ -664,7 +667,8 @@ export const pr_sat_with_options = async <CtxKey extends string>(
   const translated = translate(tt, constraints)
   const index_to_eliminate = tt.n_states() - 1  // Only this works right now!
   // const index_to_eliminate = 0
-  const enriched_constraints = enrich_constraints(tt, index_to_eliminate, regular, translated)
+  const enriched_raw = enrich_constraints(tt, index_to_eliminate, regular, translated)
+  const enriched_constraints = eliminate_ratios ? eliminate_ratios_in_constraints(enriched_raw) : enriched_raw
   const [redef, elim_constraints] = eliminate_state_variable_index(tt.n_states(), index_to_eliminate, enriched_constraints)
 
   const smtlib_lines = [
@@ -730,6 +734,7 @@ export type WrappedSolverResult =
 
 type SolverOptions2 = {
   regular: boolean
+  eliminate_ratios: boolean
   timeout_ms: number
   abort_signal?: AbortSignal
   cancel_fallback?: () => Promise<undefined>
@@ -738,6 +743,7 @@ type SolverOptions2 = {
 
 const DEFAULT_SOLVER_OPTIONS2: SolverOptions2 = {
   regular: false,
+  eliminate_ratios: false,
   timeout_ms: 30_000,
   abort_signal: undefined,
 }
@@ -759,12 +765,18 @@ export const pr_sat_wrapped = async (
   constraints: Constraint[],
   options?: Partial<SolverOptions2>,
 ): Promise<PrSATResult> => {
-  const { regular, timeout_ms, abort_signal, cancel_fallback, onTranslated } = { ...DEFAULT_SOLVER_OPTIONS2, ...(options ?? {}) }
+  const { regular, eliminate_ratios, timeout_ms, abort_signal, cancel_fallback, onTranslated } = { ...DEFAULT_SOLVER_OPTIONS2, ...(options ?? {}) }
 
+  // The displayed/saved translated constraints keep their ratio form even when
+  // ratio elimination is on — the transformation only affects the solver input.
   const translated = translate(tt, constraints)
   onTranslated?.(translated)
   const index_to_eliminate = tt.n_states() - 1  // Only this works right now!
-  const enriched_constraints = enrich_constraints(tt, index_to_eliminate, regular, translated)
+  // Guards must be derived from the division-containing form, then ratio
+  // elimination runs before the state-variable substitution so denominators
+  // are still recognizably nonnegative state-variable sums.
+  const enriched_raw = enrich_constraints(tt, index_to_eliminate, regular, translated)
+  const enriched_constraints = eliminate_ratios ? eliminate_ratios_in_constraints(enriched_raw) : enriched_raw
   const [redef, elim_constraints] = eliminate_state_variable_index(tt.n_states(), index_to_eliminate, enriched_constraints)
 
   const smtlib_lines = constraints_to_smtlib_lines(tt, index_to_eliminate, elim_constraints)

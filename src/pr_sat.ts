@@ -773,6 +773,32 @@ export const div0_conditions_in_single_constraint = (c: Constraint): Constraint[
   }
 }
 
+// True only when nonnegativity of the expression is provable outright:
+// probabilities and state-variable sums are >= 0 by the probability axioms,
+// and sums/products/even powers of such expressions stay nonnegative.
+const known_nonneg_real_expr = (e: RealExpr): boolean => {
+  if (e.tag === 'literal') {
+    return e.value >= 0
+  } else if (e.tag === 'probability' || e.tag === 'given_probability' || e.tag === 'state_variable_sum') {
+    return true
+  } else if (e.tag === 'plus' || e.tag === 'multiply') {
+    return known_nonneg_real_expr(e.left) && known_nonneg_real_expr(e.right)
+  } else if (e.tag === 'power') {
+    if (e.exponent.tag === 'literal' && Number.isInteger(e.exponent.value) && e.exponent.value % 2 === 0) {
+      return true
+    }
+    return known_nonneg_real_expr(e.base)
+  } else {
+    return false
+  }
+}
+
+// Definedness condition for dividing by `den`: prefer the stronger-looking but
+// (under the probability axioms) equivalent `den > 0` when `den` is provably
+// nonnegative; fall back to `den ≠ 0` for unknown-sign denominators.
+const denominator_definedness = (den: RealExpr): Constraint =>
+  known_nonneg_real_expr(den) ? gt(den, lit(0)) : cnot(eq(den, lit(0)))
+
 // TODO: Write function that just pulls out denominators, then change this family of functions so it just returns the negation of equality to zero or whatever.
 export const div0_conditions_in_real_expr = (expr: RealExpr): Constraint[] => {
   if (expr.tag === 'literal') {
@@ -783,7 +809,7 @@ export const div0_conditions_in_real_expr = (expr: RealExpr): Constraint[] => {
     return []
   } else if (expr.tag === 'given_probability') {
     // Conditional probability Pr(A|B) = Pr(A&B)/Pr(B) is undefined when Pr(B) = 0
-    return [cnot(eq(pr(expr.given), lit(0)))]
+    return [gt(pr(expr.given), lit(0))]
   } else if (expr.tag === 'state_variable_sum') {
     return []
   } else if (expr.tag === 'negative') {
@@ -798,7 +824,7 @@ export const div0_conditions_in_real_expr = (expr: RealExpr): Constraint[] => {
     return [...div0_conditions_in_real_expr(expr.left), ...div0_conditions_in_real_expr(expr.right)]
   } else if (expr.tag === 'divide') {
     return [
-      ...(expr.denominator.tag !== 'literal' || expr.denominator.value === 0 ? [cnot(eq(expr.denominator, lit(0)))] : []),
+      ...(expr.denominator.tag !== 'literal' || expr.denominator.value === 0 ? [denominator_definedness(expr.denominator)] : []),
       ...div0_conditions_in_real_expr(expr.numerator),
       ...div0_conditions_in_real_expr(expr.denominator),
     ]
