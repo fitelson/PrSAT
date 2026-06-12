@@ -49,6 +49,63 @@ test('single constraint', async ({ page }) => {
   await expect(page.getByText(Constants.SAT)).toBeVisible()
 });
 
+test('random search SAT for Pr(A) = 1/2', async ({ page }) => {
+  await to_load(page)
+  const test_ids = TestId.generic_multi_input('constraints')
+
+  const single_input = page.getByTestId(test_ids.split.single.get(0))
+  await single_input.getByTestId(test_ids.split.input).fill('Pr(A) = 1/2')
+
+  // Switch solver to random search.
+  const solver_select = page.getByTestId(TestId.solver_method.select)
+  await solver_select.selectOption('random')
+
+  // Seed + attempts inputs should appear.
+  await expect(page.getByTestId(TestId.solver_method.seed_input)).toBeVisible()
+  await expect(page.getByTestId(TestId.solver_method.attempts_input)).toBeVisible()
+
+  // Use a fixed seed so the run is reproducible.
+  await page.getByTestId(TestId.solver_method.seed_input).fill('e2e-sat-half')
+
+  await page.getByTestId(TestId.find_model).click()
+
+  await expect(page.getByText(Constants.SAT)).toBeVisible({ timeout: DEFAULT_TIMEOUT })
+  const badge = page.getByTestId(TestId.solver_method.badge)
+  await expect(badge).toBeVisible()
+  await expect(badge).toContainText('Random Search')
+  await expect(badge).toContainText('e2e-sat-half')
+})
+
+test('random search returns unknown for irrational constraint', async ({ page }) => {
+  await to_load(page)
+  const test_ids = TestId.generic_multi_input('constraints')
+
+  const single_input = page.getByTestId(test_ids.split.single.get(0))
+  // Pr(A)^2 = 1/2 → Pr(A) = sqrt(1/2), irrational; random search returns unknown.
+  await single_input.getByTestId(test_ids.split.input).fill('Pr(A)^2 = 1/2')
+
+  const solver_select = page.getByTestId(TestId.solver_method.select)
+  await solver_select.selectOption('random')
+  await page.getByTestId(TestId.solver_method.seed_input).fill('e2e-irrational')
+
+  await page.getByTestId(TestId.find_model).click()
+  await expect(page.getByText(Constants.UNKNOWN)).toBeVisible({ timeout: DEFAULT_TIMEOUT })
+})
+
+test('solver dropdown hides random options when Z3 is selected', async ({ page }) => {
+  await to_load(page)
+
+  // Default: Z3 selected, random options hidden.
+  await expect(page.getByTestId(TestId.solver_method.seed_input)).not.toBeVisible()
+
+  const solver_select = page.getByTestId(TestId.solver_method.select)
+  await solver_select.selectOption('random')
+  await expect(page.getByTestId(TestId.solver_method.seed_input)).toBeVisible()
+
+  await solver_select.selectOption('z3')
+  await expect(page.getByTestId(TestId.solver_method.seed_input)).not.toBeVisible()
+})
+
 test('adding a bunch of constraints', async ({ page }) => {
   await to_load(page)
   const test_ids = TestId.generic_multi_input('constraints')

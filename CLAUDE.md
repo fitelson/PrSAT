@@ -2,11 +2,42 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## PrSAT 3.1 (experimental)
+
+**This is an experimental fork of PrSAT 3.0.** Source of truth for production: `../PrSAT 3.0/PrSAT-main/`. Do NOT deploy this experimental branch.
+
+The goal of 3.1 is to add a **Random Search** solver as an alternative to Z3, porting the `Method -> "Random"` path from the Mathematica reference implementation (`../PrSAT 3.0/PrSAT_3_Mathematica/PrSAT.m`). See `RANDOM_SEARCH.md` for the design document.
+
+### Random Search — where it shines and where it doesn't
+
+- **Inequalities (strict or non-strict):** Random Search is strong here. The cost function has negative values on a full-measure region of the simplex, so Nelder-Mead reaches it quickly and rationalization almost always snaps to exact rationals that verify.
+- **Local Maple bridge (2026-06-12, latest):** `npm run maple-bridge` starts
+  `maple_bridge/server.mjs` (port 31415) wrapping desktop Maple; when reachable,
+  Random Search sends the equation system to Maple and searches each rational
+  solution branch (`src/maple_bridge_client.ts`, `src/maple_expr.ts`,
+  `search_maple_branch` in `src/random_search.ts`). Browser-only deployment is
+  unaffected — the bridge is optional and auto-detected. Tests self-skip
+  without it (`src/maple_bridge.spec.ts`).
+- **Exact certification beyond rationalization (2026-06-12, later):** when the
+  symbolic elimination leaves equations (linear in no single variable), the
+  certification step pins a snapped subset of free coordinates, re-eliminates
+  the ORIGINAL equation system at those values, and finishes any stuck
+  zero-dimensional remainder with `src/groebner.ts` — pure-TS lex Buchberger
+  (capped) + exact rational-root enumeration + back-substitution. This solved
+  the likelihood-ratio research benchmark (`src/likelihood_ratio_system.spec.ts`)
+  that desktop Mathematica/Z3 struggled with. The certification passes yield to
+  the event loop and honor the abort signal (Random Search runs on the main
+  thread, unlike Z3's WASM workers — without yielding it froze the page).
+- **Equality constraints (reworked 2026-06-12):** top-level equations are now solved symbolically before the search by `src/equation_elimination.ts` — exact linear elimination plus generic-branch (v = −B/A) substitution for nonlinear equations like independence — so the search runs over a reduced pure-inequality system and consumed equations hold by construction. Linear contradictions yield a sound `unsat`. Only equations linear in no variable (every variable squared+, or under disjunction/negation) still rely on the weak `(x-y)^2 - margin^2` cost term.
+- **Mixed systems** that are mostly inequalities with one or two simple equalities usually succeed. Heavy equational systems (independence constraints like `Pr(A & B) = Pr(A) * Pr(B)`) are better served by Z3.
+- **Small fractions (2026-06-12):** after the early-stopped Nelder-Mead success, a polish pass re-minimizes without the early stop (deep interior point), then `try_rationalize_and_verify` scans common denominators q = 1..200 (snap all coordinates to p/q, verify exactly) before falling back to coarse-to-fine continued fractions. Models now come out with small uniform denominators (e.g. 16ths); regression test in `src/small_fractions.spec.ts`.
+- **UNSAT is provable only via linear-equation contradictions** (see above); otherwise Random Search — it only ever returns `sat` or `unknown`.
+
 ## What is PrSAT?
 
 PrSAT (Probability Satisfiability) is a web-based tool for checking satisfiability of probabilistic constraints. Users enter constraints involving probabilities (e.g., `Pr(A) > Pr(B)`, `Pr(A|B) = 1/2`) and the tool uses the Z3 SMT solver to find a probability distribution satisfying all constraints, or reports UNSAT if none exists.
 
-**Live deployment:** https://fitelson.org/PrSAT/
+**Live deployment (3.0 only):** https://fitelson.org/PrSAT/
 
 ## Architecture
 
@@ -80,8 +111,15 @@ The same connective symbols (`~`/`-`/`!`, `&`/`/\`, `v`/`\/`/`∨`, `->`/`>`/`�
 
 Symbols are defined identically in `src/pr_sat.ts` (`possible_constraint_connectives` ≈ line 548, `possible_sentence_connectives` ≈ line 696). The constraint-level translation to Z3 lives in `constraint_to_bool` in `src/z3_integration.ts`. Compound metalinguistic constraints have always been supported — this enables single-input theorem-checking by entering the negation of a putative theorem and looking for UNSAT.
 
+## Companion: Mathematica PrSAT Reference
+
+Lives at `../PrSAT 3.0/PrSAT_3_Mathematica/` (separate from the TS source-of-truth at `../PrSAT 3.0/PrSAT-main/`). As of **2026-04-25** the Mathematica `Method -> "Random"` path uses our compiled Nelder-Mead implementation by default (~5× end-to-end on real problems, ~1000× on the inner search). `SearchAttempts` default bumped from 3 to 10. Both `PrSAT.m` and `PrSAT_Cloud.m` remain single self-contained packages — helpers inlined directly. Backups: `<file>.bak.before-compiled-random-2026-04-25` in the same directory.
+
+Standalone PoC for experimenting: `mathematica_compiled_random/CompiledRandomSearch.m` + `benchmark.m` + `README.md` in this folder. Run benchmark with `WolframKernel=/Applications/Wolfram.app/Contents/MacOS/WolframKernel wolframscript -file benchmark.m` (the env var override is required on this machine; plain `wolframscript` errors with "WolframKernel location could not be determined").
+
 ## Recent Work (2026-01/04)
 
+- **2026-04-25:** Compiled-NM random search backported into the Mathematica PrSAT reference. See `CHANGELOG.md` entry for details.
 - **2026-04-18:** Upgraded `z3-solver` 4.15.4 → 4.16.0 and refreshed bundled WASM assets
 - **2026-04-18:** Documented the two-level connective overloading on the project webpage; fixed in-app help typo where `->`/`→`/`>` was labeled "biconditional"
 - Added Contributors section to README (Koissi Adjorlolo, Claude, Branden Fitelson)

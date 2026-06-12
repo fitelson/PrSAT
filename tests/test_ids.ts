@@ -91,3 +91,10 @@ export const timeout = readonly({
   id: 'timeout',
   seconds: 'timeout-seconds',
 })
+
+export const solver_method = readonly({
+  select: 'solver-method-select',
+  seed_input: 'random-seed-input',
+  attempts_input: 'random-attempts-input',
+  badge: 'solver-method-badge',
+})

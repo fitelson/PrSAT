@@ -1,6 +1,118 @@
-# PrSAT 3.0 Changelog
+# PrSAT 3.1 (experimental) Changelog
 
-> **Note:** This is a local build for deployment to fitelson.org.
+> **Note:** Experimental fork of 3.0 to prototype a Random Search solver alongside Z3. Not deployed. See `RANDOM_SEARCH.md` for the design, `CLAUDE.md` for guidance.
+
+## 2026-06-12
+
+### Added: local Maple bridge — browser as frontend, desktop Maple as equation oracle
+
+Confirmed working in-browser by Branden on both benchmark systems. New architecture option for the experimental fork (deployed PrSAT remains 100% in-browser): `npm run maple-bridge` starts a zero-dependency local server (`maple_bridge/server.mjs`, port 31415) that runs `/Applications/Maple 2024/maple` on the cross-multiplied equation polynomials and returns `solve`'s solution branches. The browser (`src/maple_bridge_client.ts` + `src/maple_expr.ts`) parses each rational-function branch back into RealExpr ASTs (RootOf/float branches discarded — sound incompleteness), substitutes into the remaining inequalities, random-searches the branch's free variables, snaps to small fractions, evaluates the solved variables exactly, and verifies the full system in exact rational arithmetic — PrSAT.m's `sol1[[i]]` loop with Maple as the Solve oracle. UI: "Maple bridge: connected/off" indicator next to the Random Search options (click to re-check); result badge shows "via Random Search + Maple bridge". Automatic fallback to the pure-browser pipeline when the bridge is off or no branch certifies. Tests: `src/maple_bridge.spec.ts` (self-skips without the bridge).
+
+### Fixed: Random Search responsiveness and blowup guards
+
+- Cooperative yielding + abort checks in all certification passes (Random Search runs on the main thread, unlike Z3's WASM workers; heavy passes froze the page — twice, in Branden's live testing).
+- Hard term-count cap (1200) on substituted polynomials in the successive elimination: candidates that would explode are skipped (the 16-state 3-wise-independence system detonated the uncapped version).
+- Pass-2 certification budgets: q ≤ 48, ≤ 8 subsets, tight in-loop Gröbner caps, ≤ 120 zero-dim solves per attempt, q-outer/subset-inner loop order. Pure-browser certification of the likelihood-ratio system: SAT in ~8 min (vs seconds via the bridge).
+
+### Added: snap-then-re-eliminate + pure-TS Gröbner certification (closes the case study)
+
+The likelihood-ratio-difference system below is now solved EXACTLY by the web-ready pipeline: certified model a = (1/8, 1/8, 5/8, 0, 0, 1/28, 5/112, 5/112) on the first search attempt. New pass 2 in `try_rationalize_and_verify`'s successor (`src/random_search.ts`): pin a snapped subset of the free coordinates, re-run the successive elimination on the full original equation system at those values, and finish any stuck zero-dimensional remainder with `src/groebner.ts` — a pure-TypeScript lex Gröbner basis (capped Buchberger) plus exact rational-root enumeration and back-substitution, i.e. the algorithmic core of a CAS `solve` without shipping a CAS. All answers remain exactly verified; irrational solutions are soundly missed. Regression test: `src/likelihood_ratio_system.spec.ts`. Full suite: 669 passing.
+
+### Case study: likelihood-ratio-difference system (8 states, 4 rational equations)
+
+Documented in RANDOM_SEARCH.md: equation elimination absorbs 3 of the 4 equations, Nelder-Mead then converges on every attempt, but exact certification needs either a CAS-derived branch parameterization (desktop Maple solves the system into 5 rational branches; exact model a = (1/24, 1/24, 7/12, 0, 0, 1/24, 7/48, 7/48)) or the planned snap-then-re-eliminate pass (RANDOM_SEARCH.md "v2.5"). Test harness: `src/tmp_branden_system.spec.ts`.
+
+### Added: Equation elimination — Random Search now handles equational constraints
+
+Random Search was nearly useless on systems containing equations (the cost term `(x−y)² − margin²` only rewards landing within ~1e-3 of the solution manifold, and rationalization rarely snapped onto it). Now, mirroring the Mathematica reference's equation phase (PrSAT.m ~1015–1060, `Solve` + substitute + search inequalities), a new module `src/equation_elimination.ts` solves the equations symbolically BEFORE the search:
+
+- Top-level equation conjuncts are cross-multiplied to polynomials over the state variables (exact rational coefficients). Successive elimination then repeatedly finds an equation linear in some one variable v (E = A·v + B = 0) and substitutes v = −B/A: ordinary linear elimination when A is constant (covers Pr-value and conditional-probability equations and the Σ a_i = 1 axiom), generic-branch (A ≠ 0) rational-function substitution when A is nonconstant (covers independence `Pr(A∧B) = Pr(A)·Pr(B)` and most textbook nonlinear systems). Only equations with every variable squared-or-higher stay in the numeric cost.
+- The random search then runs over only the remaining free variables; pinned variables are reconstructed exactly, so all consumed equations hold by construction, and the usual exact verification checks the full original system (SAT answers always sound).
+- Sound UNSAT, sometimes: a contradiction derived purely by constant-denominator (linear) steps refutes the system — e.g. `Pr(A) = 1/2 & Pr(A) = 1/3` now reports UNSAT, as does a unique linear solution that violates an inequality. Contradictions reached through generic-branch substitutions only refute that branch and fall back to linear-only elimination.
+- Boundary fix: certainty constraints like `Pr(S) = 1` pin states to 0, where non-strict axioms sit exactly on their boundary and the old strict `fMin < 0` acceptance could never fire; acceptance is now `fMin < 1e-9` (`NUMERIC_ACCEPT_EPS`), with exact verification as the judge.
+- The old eliminate-last-state-variable step is subsumed (it is just linear elimination of Σ a_i = 1).
+- Tests: `src/equation_elimination.spec.ts` — unit tests for the elimination plus end-to-end Random Search runs: Titelbaum 2.10 (four equations, three letters) now SAT; independence + inequalities SAT; unique-solution systems solved with zero search attempts; linear contradictions UNSAT. All 666 unit tests pass.
+
+### Added: Decimals toggle in Evaluate model
+
+New "Decimals" button to the right of Clear in the Evaluate model toolbar. Toggles all evaluation results between exact rationals and 4-decimal-place approximations (e.g. 111/88 vs 1.2614); the button relabels to "Fractions" while decimals are shown. Quadratic-root values use their decimal approximation; higher-degree roots keep their exact display. Implemented via a `show_decimals` editable in `model_evaluators` (`src/text_to_display.ts`) and a new optional `extra_toolbar_buttons` parameter on `generic_input_block` (`src/block_playground.ts`).
+
+### Improved: Random Search now produces small fractions
+
+Random Search models previously came back with huge denominators (worst observed: ~10^20 on the eliminated coordinate). Two fixes in `src/random_search.ts`:
+
+- **Polish pass:** Nelder-Mead early-stops the instant the cost dips below 0, leaving the point barely inside the feasible region. After that first success we now re-run `minimize` from the found point without the early stop, pushing the point deep into the region so coarse rationalizations survive exact verification.
+- **Small-denominator rationalization** (`try_rationalize_and_verify` rewritten): first a common-denominator scan -- snap all coordinates to multiples of 1/q for q = 1, 2, ..., 200 and return the first q that verifies exactly (uniform small denominator, Mathematica-style models); then a coarse-to-fine continued-fraction fallback starting at tol = 1/4 (the old code started at reg_margin/2 = 5e-4 and only refined, guaranteeing large denominators).
+
+On the likelihood-ratio test case (`Pr(H1|E1) - Pr(H1) > Pr(H2|E2) - Pr(H2)`, `Pr(E1|H1)/Pr(E1|~H1) < Pr(E2|H2)/Pr(E2|~H2)`, 16 states), three seeds now give max denominators 16, 38, 25 (previously 42, 181, ~7.6e20). Regression test: `src/small_fractions.spec.ts`. All 656 unit tests pass.
+
+## 2026-04-25
+
+### Added: Compiled-NM random search for the Mathematica PrSAT reference
+
+Ported the TS Random Search win back into the Mathematica reference (`../PrSAT 3.0/PrSAT_3_Mathematica/`). The stock `Method -> "Random"` path used `NMinimize[..., Method -> "RandomSearch", ...]` over a *symbolic* `Max`/`Min` cost tree — every optimizer call walked the tree through Mathematica's interpreter. We replaced the inner search with `Compile[..., CompilationTarget -> "C"]` of the same cost expression plus a hand-rolled Nelder-Mead loop. PrSAT's existing rationalization/`Verify` step (lines ~960–985) handles the float→exact-rationals conversion unchanged.
+
+**Approach:** for each constraint `(translated, sol1-substituted)` system, build the same scalar cost `f` the Mathematica path would have built; inline `sysCons` (probability-axiom box constraints) into `f` as `Max` terms so the compiled NM cannot escape the simplex; compile to a `CompiledFunction`; run hand-rolled Nelder-Mead with `EarlyStopBelow -> 0`; return `{value, varRules}` matching `NMinimize`'s signature so downstream rationalization is unchanged.
+
+**End-to-end speedup on `mpr2` (6 events, 2 nontrivial polynomial inequalities, 63-dim state, identical seed):**
+| configuration | `SearchAttempts` | wall(s) | model |
+|---|---|---|---|
+| stock PrSAT.m + NMinimize-RandomSearch | 3 | 23.9 | exact rationals |
+| modified PrSAT.m + compiled NM | 10 | 6.3 | exact rationals |
+
+3.8× faster end-to-end despite 3× the retry budget. Inner-loop microbenchmarks (`mathematica_compiled_random/benchmark.m` on 6 small problems) show 200×–25 000× speedup of just the search portion (geomean ~1 000×); on real problems the build/compile prep dominates and the headline becomes ~5×.
+
+**Changes (in the 3.0 Mathematica directory; user explicitly OK'd modifying it):**
+- `PrSAT.m`: `Method -> "Random"` (was `"NM"`); `SearchAttempts -> 10` (was 3); ~150 lines of helpers inlined before `MAIN PRSAT FUNCTION` (`AugmentCostWithSysCons`, `CompileCostFunction[, WVM]`, `NelderMead`, `CompiledRandomSearchInner`); `Method == "Random"` branch routed through `CompiledRandomSearchInner`.
+- `PrSAT_Cloud.m`: same four changes; helpers inlined since Cloud has no co-located file system.
+
+The default-Method change means plain `PrSAT[constraints]` now uses the compiled path. Users who explicitly pass `Method -> "NM"` still get the legacy `NMinimize` flow (untouched).
+- Backups at `PrSAT.m.bak.before-compiled-random-2026-04-25` and `PrSAT_Cloud.m.bak.before-compiled-random-2026-04-25`.
+- Both files remain single self-contained packages.
+
+**Standalone PoC kept in this folder:** `mathematica_compiled_random/CompiledRandomSearch.m` plus `benchmark.m` and `README.md`. The latter is a richer entry point for experimenting (exposes `BuildCostExpression`, `RationalizePoint`, `CompiledRandomSearchSolve`).
+
+**Subtleties learned the hard way:**
+- `ValueQ[fn]` returns `False` for functions defined via `fn[x_] := ...` because `ValueQ` only inspects `OwnValues`, not `DownValues`. Use `Length[DownValues[fn]] > 0` for "is this defined?" guards. Got us a recursive-load infinite loop the first try.
+- `Inequality[a_, b_, c_, d_, e_]` and `Less[a_, b_, c_]` (chain forms) auto-evaluate inside rule LHSs and refuse to match unless wrapped in `HoldPattern[]`.
+- Putting both chain-decomposition rules and an `And[xs__] :> Sequence[xs]` rule in a single `ReplaceAll` silently disables the chain rules (Mathematica peculiarity); apply them in two `/.` passes.
+- `Simplify` on the augmented cost expression blows up combinatorially on dense equation systems; skip it when `LeafCount[...] >= 5000`. (Compile doesn't need a simplified form.)
+
+## 2026-04-24
+
+### Added: Random Search solver (port of Mathematica `Method -> "Random"`)
+
+Ports the random-search branch of the Mathematica reference PrSAT (`../PrSAT 3.0/PrSAT_3_Mathematica/PrSAT.m` lines 886–995) to pure TypeScript. New "Solver" dropdown lets users pick **Z3 (SMT)** (default) or **Random Search**.
+
+**Algorithm:**
+1. Translate user constraints (Pr → state_variable_sum) + enrich with probability axioms and div0 conditions, then eliminate the last state variable.
+2. Build a numeric cost function `f` with `f(x) < 0` iff all constraints are satisfied (at `margin = 1e-6`). Equality atoms are relaxed to `(x-y)^2 - margin^2` (divergence from Mathematica's `ZeroJump`, which requires exact zero — Nelder-Mead can't reliably hit that).
+3. For up to `search_attempts` (default 3) iterations: sample an initial point from Dirichlet(1,...,1), run Nelder-Mead with early-stop at `f < 0`, then rationalize the numerical result via continued fractions (starting at `reg_margin/2`, halving 40 times) and verify against the enriched constraints under exact BigInt rational arithmetic.
+4. If any attempt verifies: SAT. Otherwise: unknown. **Random Search cannot prove UNSAT**.
+
+**New files (all under `src/`):**
+- `rationalize.ts` + spec — BigInt Rational type, arithmetic, continued-fraction `rationalize`, exact `evaluate_real_expr_rational` / `evaluate_constraint_rational`, `verify_rational_model`.
+- `cost_function.ts` + spec — `normalize_constraint` (De Morgan + iff/imp expansion), numeric evaluator, `build_cost_function` that walks the normalized AST emitting a scalar.
+- `optimizer.ts` + spec — self-contained Nelder-Mead simplex (α=1, γ=2, ρ=0.5, σ=0.5) with `earlyStopBelow` and optional AbortSignal polling.
+- `random_search.ts` + spec — `random_pr_sat_wrapped` orchestrator (matches `pr_sat_wrapped` signature), Dirichlet sampler, rational → `ModelAssignmentOutput` converter, `evaluate()` closure using rational arithmetic (for the UI's "Evaluate model" feature).
+
+**UI (in `src/text_to_display.ts`):**
+- New "Solver:" dropdown (Z3 / Random Search) next to Regular/Timeout.
+- Seed + attempts inputs, visible only when Random Search is selected.
+- SAT/unknown/cancelled status line shows a small "(via Random Search, seed: ..., attempt k/k, best f=...)" badge for random-search runs.
+- Cancel button works for random search (polled between Nelder-Mead iterations and between retry attempts).
+
+**Defaults (match Mathematica):** `margin = 1e-6`, `reg_margin = 1e-3`, `search_attempts = 3`, `max_rationalize_attempts = 40`. **v1 limitations:** free real variables rejected with a clean error; non-integer `RealExpr.power` causes rational verification to fail (returns unknown); Nelder-Mead degrades above ~20 free dimensions (5+ letters).
+
+**Tests:** 88 new unit tests (rationalize: 35, cost_function: 22, optimizer: 9, random_search: 22) + 3 new Playwright e2e tests exercising the solver dropdown. All 655 unit tests pass in this folder (567 pre-existing + 88 new).
+
+**Observed behavior (after initial testing):** Random Search works well on inequality constraints and simple equalities like `Pr(A) = 1/2`. Heavily equational systems (e.g. independence `Pr(A & B) = Pr(A) * Pr(B)`) often require hitting exact irrational/high-denominator rationals and fall back to `unknown` — use Z3 for those. See `CLAUDE.md` "Random Search — where it shines and where it doesn't".
+
+### Fixed: blank page on first load
+
+`solver_method.watch(...).call()` invoked `invalidate()` before `invalidate` was defined in the closure, throwing a `ReferenceError` during module init and leaving the body blank. Removed the eager `.call()` and set the initial `display: none` inline on the random-options row instead.
+
+## Pre-existing 3.0 history (forked from)
 
 ## 2026-04-18 (later)
 

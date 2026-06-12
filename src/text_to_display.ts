@@ -4,6 +4,8 @@ import { assert, assert_exists, fallthrough, sleep } from "./utils";
 import { parse_constraint, parse_constraint_or_real_expr } from "./parser";
 import { constraint_to_string, letter_string, TruthTable, variables_in_constraints } from "./pr_sat";
 import { FancyEvaluatorOutput, init_z3, ModelAssignmentOutput, pr_sat_wrapped, PrSATResult, WrappedSolver, WrappedSolverResult } from "./z3_integration";
+import { random_pr_sat_wrapped, RandomPrSATResult, DEFAULT_SEARCH_ATTEMPTS } from "./random_search";
+import { ping_maple_bridge, DEFAULT_MAPLE_BRIDGE_URL } from "./maple_bridge_client";
 import { s_to_string } from "./s";
 import { ConstraintOrRealExpr, PrSat } from "./types";
 import { InputBlockLogic } from "./display_logic";
@@ -891,7 +893,7 @@ const model_display = (tt: TruthTable, model_assignments: Record<number, ModelAs
 type ModelFinderState2 =
   | { tag: 'waiting' }
   | { tag: 'looking', truth_table: TruthTable, abort_controller: AbortController }
-  | { tag: 'finished', truth_table: TruthTable, solver_output: PrSATResult }
+  | { tag: 'finished', truth_table: TruthTable, solver_output: PrSATResult | RandomPrSATResult }
   // | { tag: 'invalidated', last: { truth_table: TruthTable } }
   | { tag: 'invalidated', last: ModelFinderState2 }
   | { tag: 'exception', message: string }
@@ -974,8 +976,41 @@ type ModelEvaluator = {
   refresh: () => void
 }
 
-const fancy_evaluator_result_to_display = (output: FancyEvaluatorOutput): Node => {
+// Numeric value of a model assignment, for decimal display. Undefined when no
+// float value is extractable (e.g. roots of degree > 2 polynomials).
+const model_assignment_to_number = (ma: ModelAssignmentOutput): number | undefined => {
+  if (ma.tag === 'literal') {
+    return ma.value
+  } else if (ma.tag === 'negative') {
+    const inner = model_assignment_to_number(ma.inner)
+    return inner === undefined ? undefined : -inner
+  } else if (ma.tag === 'rational') {
+    const n = model_assignment_to_number(ma.numerator)
+    const d = model_assignment_to_number(ma.denominator)
+    return n === undefined || d === undefined || d === 0 ? undefined : n / d
+  } else if (ma.tag === 'root-obj') {
+    const a = model_assignment_to_number(ma.a)
+    const b = model_assignment_to_number(ma.b)
+    const c = model_assignment_to_number(ma.c)
+    if (a === undefined || b === undefined || c === undefined) {
+      return undefined
+    }
+    return simplifyQuadraticRoot(a, b, c, ma.index).decimalValue
+  } else if (ma.tag === 'generic-root-obj' && ma.degree === 2) {
+    return simplifyQuadraticRoot(ma.coefficients[0], ma.coefficients[1], ma.coefficients[2], ma.index).decimalValue
+  } else {
+    return undefined
+  }
+}
+
+const fancy_evaluator_result_to_display = (output: FancyEvaluatorOutput, decimals: boolean = false): Node => {
   if (output.tag === 'result') {
+    if (decimals) {
+      const value = model_assignment_to_number(output.result)
+      if (value !== undefined) {
+        return math_el('mn', {}, value.toFixed(4))
+      }
+    }
     return model_assignment_display(output.result)
   } else if (output.tag === 'bool-result') {
     return math_el('mtext', {}, output.result ? '⊤' : '⊥')
@@ -1000,6 +1035,8 @@ const model_evaluators = (
   state_box: Editable<ModelFinderState2>,
   model_assignments: rEditable<{ truth_table: TruthTable, values: Record<number, ModelAssignmentOutput> } | undefined>,
 ): ModelEvaluator => {
+  const show_decimals = new Editable(false)
+
   const display_constraint_or_real_expr_with_evaluation = async (e: ConstraintOrRealExpr): Promise<Element> => {
     const d = display_constraint_or_real_expr(e, false)
     const assignments = model_assignments.get()
@@ -1030,7 +1067,7 @@ const model_evaluators = (
       // // const result = await fancy_evaluate_constraint_or_real_expr(z3_state.ctx, assignments.solver, assignments.truth_table, e)  // Could throw!
       // const result = await fancy_evaluate_constraint_or_real_expr(z3_state.ctx, assignments.model, assignments.truth_table, e)  // Could throw!
       // const result_html = constraint_to_real_expr_result_to_html(result)
-      const result_html = fancy_evaluator_result_to_display(result)
+      const result_html = fancy_evaluator_result_to_display(result, show_decimals.get())
       return math_el('math', {},
         d,
         math_el('mo', { class: 'yields' }, '⟾'),
@@ -1051,13 +1088,22 @@ const model_evaluators = (
     parse_constraint_or_real_expr,
     // (logic) => split_input(logic, display_constraint_or_real_expr_with_evaluation, Constants.EVALUATOR_INPUT_PLACEHOLDER, TestId.single_input.eval))
     (logic) => split_input(logic, display_constraint_or_real_expr_with_evaluation, Constants.EVALUATOR_INPUT_PLACEHOLDER, test_ids.split))
-  const mi = generic_input_block(eval_block, Constants.BATCH_EVALUATOR_INPUT_PLACEHOLDER, test_ids)
+  const decimals_button = el('input', { type: 'button', value: 'Decimals', style: 'margin-left: 0.4em;' }) as HTMLButtonElement
+  decimals_button.onclick = () => {
+    show_decimals.set(!show_decimals.get())
+  }
+  const mi = generic_input_block(eval_block, Constants.BATCH_EVALUATOR_INPUT_PLACEHOLDER, test_ids, [decimals_button])
 
   const refresh = async () => {
     for (const input of eval_block.get_inputs()) {
       await input.text.set(input.text.get())
     }
   }
+
+  show_decimals.watch((decimals) => {
+    decimals_button.value = decimals ? 'Fractions' : 'Decimals'
+    refresh().catch((e) => { console.error('decimals toggle refresh failed', e) })
+  })
 
   const element = el('div', { class: 'model-evaluators' },
     el('div', { style: 'margin-bottom: 0.4em;' }, 'Evaluate model'),
@@ -1198,20 +1244,77 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
   const timeout_ms = new Editable(Constants.DEFAULT_SOLVE_TIMEOUT_MS)
   const timeout_input = timeout(timeout_ms)
   timeout_ms.watch((ms) => { console.log('timeout set to:', ms) })
-  const generate_line = el('div', { style: 'display: flex;' },
-    generate_button,
-    // el('input', { type: 'button', value: Constants.FIND_MODEL_BUTTON_LABEL, class: 'generate' }) as HTMLButtonElement,
-    // options_button,
-    el('div', { style: 'display: flex; flex-direction: column; margin-left: 0.4em;' },
-      el('label', {},
-        'Regular:',
-        regular_toggle,
-      ),
-      el('label', { style: 'display: flex;' },
-        el('span', { style: 'margin-right: 1ch;' }, 'Timeout:'),
-        timeout_input,
+
+  // Solver method selector: Z3 (default) or Random Search (experimental in 3.1).
+  const solver_method = new Editable<'z3' | 'random'>('z3')
+  const solver_method_select = tel(TestId.solver_method.select, 'select', { style: 'margin-left: 0.4em;' },
+    el('option', { value: 'z3' }, 'Z3 (SMT)'),
+    el('option', { value: 'random' }, 'Random Search'),
+  ) as HTMLSelectElement
+  solver_method_select.addEventListener('change', () => {
+    solver_method.set(solver_method_select.value as 'z3' | 'random')
+  })
+
+  // Random-search-only inputs. Visible only when solver_method === 'random'.
+  const random_seed = new Editable<string>('')
+  const seed_input = tel(TestId.solver_method.seed_input, 'input', { type: 'text', placeholder: '(auto)', style: 'margin-left: 0.4em; width: 12ch;' }) as HTMLInputElement
+  seed_input.addEventListener('change', () => { random_seed.set(seed_input.value) })
+
+  const random_attempts = new Editable<number>(DEFAULT_SEARCH_ATTEMPTS)
+  const attempts_input = tel(TestId.solver_method.attempts_input, 'input', {
+    type: 'number', min: '1', max: '100', value: String(DEFAULT_SEARCH_ATTEMPTS),
+    style: 'margin-left: 0.4em; width: 5ch;',
+  }) as HTMLInputElement
+  attempts_input.addEventListener('change', () => {
+    const n = Math.max(1, Math.min(100, parseInt(attempts_input.value) || DEFAULT_SEARCH_ATTEMPTS))
+    attempts_input.value = String(n)
+    random_attempts.set(n)
+  })
+
+  // Local Maple bridge detection (optional; run `npm run maple-bridge`).
+  const maple_bridge_available = new Editable(false)
+  const maple_bridge_indicator = el('span', { style: 'margin-left: 0.4em; font-size: 0.85em; color: #888;' }, 'Maple bridge: checking…')
+  const refresh_maple_bridge = () => {
+    ping_maple_bridge().then((ok) => {
+      maple_bridge_available.set(ok)
+      maple_bridge_indicator.textContent = ok ? 'Maple bridge: connected' : 'Maple bridge: off'
+      maple_bridge_indicator.style.color = ok ? '#1a7f37' : '#888'
+    }).catch(() => {})
+  }
+  refresh_maple_bridge()
+  maple_bridge_indicator.onclick = refresh_maple_bridge
+  maple_bridge_indicator.style.cursor = 'pointer'
+  maple_bridge_indicator.title = 'Click to re-check. Start with: npm run maple-bridge'
+
+  const random_options_row = el('div', { style: 'display: none; flex-wrap: wrap; gap: 0.8em; margin-top: 0.2em;' },
+    el('label', {}, 'Seed:', seed_input),
+    el('label', {}, 'Attempts:', attempts_input),
+    maple_bridge_indicator,
+  )
+  solver_method.watch((m) => {
+    random_options_row.style.display = m === 'random' ? 'flex' : 'none'
+    invalidate()
+  })
+
+  const generate_line = el('div', { style: 'display: flex; flex-direction: column;' },
+    el('div', { style: 'display: flex;' },
+      generate_button,
+      el('div', { style: 'display: flex; flex-direction: column; margin-left: 0.4em;' },
+        el('label', {},
+          'Solver:',
+          solver_method_select,
+        ),
+        el('label', {},
+          'Regular:',
+          regular_toggle,
+        ),
+        el('label', { style: 'display: flex;' },
+          el('span', { style: 'margin-right: 1ch;' }, 'Timeout:'),
+          timeout_input,
+        ),
       ),
     ),
+    random_options_row,
   )
   
   const set_all_constraints = (all_constraints: Constraint[] | undefined) => {
@@ -1417,20 +1520,28 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
     try {
       const tt_display = truth_table_display(truth_table)
       model_container.appendChild(tt_display)
-      // const { status, all_constraints, state_values, model } = await pr_sat_with_truth_table(ctx, truth_table, constraints, is_regular)
-      // const result = await pr_sat_with_options(ctx, truth_table, constraints, { regular: is_regular, timeout_ms: timeout_ms.get() })
-      const result = await pr_sat_wrapped(solver, truth_table, constraints, {
-        regular: is_regular,
-        abort_signal: abort_controller.signal,
-        cancel_fallback,
-        onTranslated: (translated) => {
-          constraints_view.innerHTML = ''
-          for (const constraint of translated) {
-            const e = constraint_to_html(constraint, true)
-            constraints_view.appendChild(el('div', { style: 'margin-top: 0.4em;' }, e))
-          }
+      const on_translated = (translated: Constraint[]) => {
+        constraints_view.innerHTML = ''
+        for (const constraint of translated) {
+          const e = constraint_to_html(constraint, true)
+          constraints_view.appendChild(el('div', { style: 'margin-top: 0.4em;' }, e))
         }
-      })
+      }
+      const result: PrSATResult | RandomPrSATResult = solver_method.get() === 'random'
+        ? await random_pr_sat_wrapped(truth_table, constraints, {
+            regular: is_regular,
+            abort_signal: abort_controller.signal,
+            seed: random_seed.get() === '' ? undefined : random_seed.get(),
+            search_attempts: random_attempts.get(),
+            onTranslated: on_translated,
+            maple_bridge_url: maple_bridge_available.get() ? DEFAULT_MAPLE_BRIDGE_URL : undefined,
+          })
+        : await pr_sat_wrapped(solver, truth_table, constraints, {
+            regular: is_regular,
+            abort_signal: abort_controller.signal,
+            cancel_fallback,
+            onTranslated: on_translated,
+          })
       state2.set({ tag: 'finished', truth_table, solver_output: result })
       // const { status, all_constraints, model } = result
       // if (result.solver_output.status === 'sat') {
@@ -1597,28 +1708,41 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
       cancel_button.disabled = false
     } else if (state.tag === 'finished') {
       generate_button.disabled = false
-      if (state.solver_output.solver_output.status === 'sat') {
-        state_display.innerHTML = ''
-        state_display.append(Constants.SAT)
-        const model_html = model_display(state.truth_table, state.solver_output.solver_output.state_assignments)
+      const so = state.solver_output
+      const status_label: string = (() => {
+        if (so.solver_output.status === 'sat') return Constants.SAT
+        if (so.solver_output.status === 'unsat') return Constants.UNSAT
+        if (so.solver_output.status === 'unknown') return Constants.UNKNOWN
+        if (so.solver_output.status === 'cancelled') return Constants.CANCELLED
+        if (so.solver_output.status === 'exception') return `Exception! ${so.solver_output.message}`
+        fallthrough('model_finder_display.state2.watch', so.solver_output)
+        return ''
+      })()
+
+      state_display.innerHTML = ''
+      state_display.append(status_label)
+
+      // Random-search badge: method / seed / attempts_used.
+      if ('method' in so && so.method === 'random') {
+        const badge_parts: string[] = [so.used_maple_bridge ? `via Random Search + Maple bridge` : `via Random Search`]
+        badge_parts.push(`seed: ${so.seed}`)
+        badge_parts.push(`attempt ${so.attempts_used}/${so.attempts_used > 0 ? so.attempts_used : 1}`)
+        if (so.final_fmin !== undefined && Number.isFinite(so.final_fmin)) {
+          badge_parts.push(`best f=${so.final_fmin.toExponential(2)}`)
+        }
+        state_display.append(' ')
+        state_display.appendChild(tel(TestId.solver_method.badge, 'span', {
+          style: 'font-size: 0.85em; color: #555; margin-left: 0.6em;',
+        }, `(${badge_parts.join(', ')})`))
+      }
+
+      if (so.solver_output.status === 'sat') {
+        const model_html = model_display(state.truth_table, so.solver_output.state_assignments)
         model_container.innerHTML = ''
         model_container.appendChild(model_html)
         right_side.appendChild(evaluators.element)
-      } else if (state.solver_output.solver_output.status === 'unsat') {
-        state_display.innerHTML = ''
-        state_display.append(Constants.UNSAT)
+      } else if (so.solver_output.status === 'unsat') {
         right_side.innerHTML = ''
-      } else if (state.solver_output.solver_output.status === 'unknown') {
-        state_display.innerHTML = ''
-        state_display.append(Constants.UNKNOWN)
-      } else if (state.solver_output.solver_output.status === 'cancelled') {
-        state_display.innerHTML = ''
-        state_display.append(Constants.CANCELLED)
-      } else if (state.solver_output.solver_output.status === 'exception') {
-        state_display.innerHTML = ''
-        state_display.appendChild(el('span', {}, `Exception! ${state.solver_output.solver_output.message}`))
-      } else {
-        fallthrough('model_finder_display.state2.watch', state.solver_output.solver_output)
       }
     } else if (state.tag === 'invalidated') {
       state_display.innerHTML = ''
@@ -1834,20 +1958,7 @@ const main = (): HTMLElement => {
 
   return el('div', {},
     el('div', { class: 'header' },
-      el('div', { style: 'font-weight: bold; font-size: 1.5em;' }, 'PrSAT 3.0'),
-      el('br', {}),
-      el('div', {},
-        'For more information regarding syntax, usage, etc., see the ',
-        el('a', { href: 'https://fitelson.org/PrSAT/', target: '_blank' }, 'official PrSAT 3.0 webpage'),
-        '.',
-      ),
-      el('br', {}),
-      el('div', {},
-        el('a', { href: 'https://youtu.be/F_WbzKr7qJQ', target: '_blank' }, 'Here'),
-        ' is a brief video demo of the software. The text file for the demo can be downloaded ',
-        el('a', { href: 'https://fitelson.org/PrSAT/PrSAT_3.0_demo_examples.txt', target: '_blank' }, 'here'),
-        '.',
-      ),
+      el('div', { style: 'font-weight: bold; font-size: 1.5em;' }, 'PrSAT 3.1 (experimental)'),
     ),
     // throw_button,
     global_error_display,

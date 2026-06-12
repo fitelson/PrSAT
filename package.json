@@ -1,7 +1,7 @@
 {
-  "name": "prsat",
+  "name": "prsat-3.1-experimental",
   "private": true,
-  "version": "0.0.0",
+  "version": "3.1.0-experimental",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest --allowOnly --run && npx playwright test --project chromium --project firefox",
     "test-single": "vitest --allowOnly",
-    "deploy": "npm run build && scp -r dist/* fitelson@fitelson.org:/home/fitelson/www/www/PrSAT/dist/"
+    "deploy": "npm run build && scp -r dist/* fitelson@fitelson.org:/home/fitelson/www/www/PrSAT/dist/",
+    "maple-bridge": "node maple_bridge/server.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",
