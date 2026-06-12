@@ -4,7 +4,7 @@ import { assert, assert_exists, fallthrough, sleep } from "./utils";
 import { parse_constraint, parse_constraint_or_real_expr } from "./parser";
 import { constraint_to_string, letter_string, TruthTable, variables_in_constraints } from "./pr_sat";
 import { FancyEvaluatorOutput, init_z3, ModelAssignmentOutput, pr_sat_wrapped, PrSATResult, WrappedSolver, WrappedSolverResult } from "./z3_integration";
-import { random_pr_sat_wrapped, RandomPrSATResult, DEFAULT_SEARCH_ATTEMPTS } from "./random_search";
+import { build_rational_evaluator, RandomPrSATResult, DEFAULT_SEARCH_ATTEMPTS, RandomSearchOptions } from "./random_search";
 import { ping_maple_bridge, DEFAULT_MAPLE_BRIDGE_URL } from "./maple_bridge_client";
 import { s_to_string } from "./s";
 import { ConstraintOrRealExpr, PrSat } from "./types";
@@ -1527,15 +1527,50 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
           constraints_view.appendChild(el('div', { style: 'margin-top: 0.4em;' }, e))
         }
       }
+      const run_random_search_in_worker = (): Promise<RandomPrSATResult> => new Promise((resolve) => {
+        const worker = new Worker(new URL('./random_search_worker.ts', import.meta.url), { type: 'module' })
+        const options: Partial<Omit<RandomSearchOptions, 'abort_signal' | 'onTranslated'>> = {
+          regular: is_regular,
+          seed: random_seed.get() === '' ? undefined : random_seed.get(),
+          search_attempts: random_attempts.get(),
+          maple_bridge_url: maple_bridge_available.get() ? DEFAULT_MAPLE_BRIDGE_URL : undefined,
+        }
+        const cancelled: RandomPrSATResult = {
+          constraints: { original: constraints, translated: [], extra: [], eliminated: [] },
+          smtlib_input: '; cancelled',
+          method: 'random',
+          seed: random_seed.get(),
+          attempts_used: 0,
+          solver_output: { status: 'cancelled' },
+        }
+        const on_abort = () => {
+          worker.terminate()
+          resolve(cancelled)
+        }
+        abort_controller.signal.addEventListener('abort', on_abort)
+        worker.onmessage = (event: MessageEvent) => {
+          const msg = event.data
+          if (msg.tag === 'translated') {
+            on_translated(msg.translated)
+          } else if (msg.tag === 'done') {
+            abort_controller.signal.removeEventListener('abort', on_abort)
+            worker.terminate()
+            const result: RandomPrSATResult = msg.result
+            // Rebuild the non-cloneable evaluator from the exact rational model.
+            if (result.solver_output.status === 'sat' && result.rational_model !== undefined) {
+              result.solver_output.evaluate = build_rational_evaluator(result.rational_model)
+            }
+            resolve(result)
+          } else if (msg.tag === 'error') {
+            abort_controller.signal.removeEventListener('abort', on_abort)
+            worker.terminate()
+            resolve({ ...cancelled, smtlib_input: `; error: ${msg.message}`, solver_output: { status: 'exception', message: msg.message } })
+          }
+        }
+        worker.postMessage({ constraints, variables: truth_table.variables, options })
+      })
       const result: PrSATResult | RandomPrSATResult = solver_method.get() === 'random'
-        ? await random_pr_sat_wrapped(truth_table, constraints, {
-            regular: is_regular,
-            abort_signal: abort_controller.signal,
-            seed: random_seed.get() === '' ? undefined : random_seed.get(),
-            search_attempts: random_attempts.get(),
-            onTranslated: on_translated,
-            maple_bridge_url: maple_bridge_available.get() ? DEFAULT_MAPLE_BRIDGE_URL : undefined,
-          })
+        ? await run_random_search_in_worker()
         : await pr_sat_wrapped(solver, truth_table, constraints, {
             regular: is_regular,
             abort_signal: abort_controller.signal,

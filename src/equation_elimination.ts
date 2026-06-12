@@ -143,6 +143,15 @@ const prat_combine = (negate_b: boolean, a: PolyRat, b: PolyRat): PolyRat => {
   }
 }
 
+// Conversion size cap: equations over many states (e.g. 6 letters = 64 state
+// variables with triple-product right-hand sides) can explode to 10^5+
+// monomials; past this cap the equation stays in the residual system (the
+// numeric cost function evaluates the original division form just fine).
+const MAX_CONVERSION_TERMS = 20000
+
+const capped = (pr: PolyRat | undefined): PolyRat | undefined =>
+  pr === undefined || pr.num.size > MAX_CONVERSION_TERMS ? undefined : pr
+
 // Returns undefined for expressions outside the supported fragment (free real
 // variables, untranslated probabilities, non-integer exponents) — the caller
 // then leaves the conjunct in the residual system.
@@ -159,17 +168,17 @@ const real_expr_to_polyrat = (expr: RealExpr): PolyRat | undefined => {
   } else if (expr.tag === 'plus' || expr.tag === 'minus') {
     const l = real_expr_to_polyrat(expr.left)
     const r = real_expr_to_polyrat(expr.right)
-    return l === undefined || r === undefined ? undefined : prat_combine(expr.tag === 'minus', l, r)
+    return l === undefined || r === undefined ? undefined : capped(prat_combine(expr.tag === 'minus', l, r))
   } else if (expr.tag === 'multiply') {
     const l = real_expr_to_polyrat(expr.left)
     const r = real_expr_to_polyrat(expr.right)
     return l === undefined || r === undefined ? undefined
-      : { num: poly_mul(l.num, r.num), dens: [...l.dens, ...r.dens] }
+      : capped({ num: poly_mul(l.num, r.num), dens: [...l.dens, ...r.dens] })
   } else if (expr.tag === 'divide') {
     const l = real_expr_to_polyrat(expr.numerator)
     const r = real_expr_to_polyrat(expr.denominator)
     if (l === undefined || r === undefined) return undefined
-    return { num: poly_mul(l.num, dens_product(r.dens)), dens: [...l.dens, r.num] }
+    return capped({ num: poly_mul(l.num, dens_product(r.dens)), dens: [...l.dens, r.num] })
   } else if (expr.tag === 'power') {
     const base = real_expr_to_polyrat(expr.base)
     if (base === undefined) return undefined

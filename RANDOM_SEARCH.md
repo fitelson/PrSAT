@@ -125,7 +125,14 @@ Still-open cheap win: report "numerically SAT (uncertified)" with the float
 model and per-constraint residuals when optimization converges but
 certification fails, instead of a bare `unknown`.
 
-## Implemented (2026-06-12, latest): local Maple bridge
+## Implemented (2026-06-12, latest): Web Worker + permanent install
+
+Random Search runs in a Web Worker (no page freezes, instant Cancel); the
+cross-multiplication conversion is capped at 20k terms (oversized equations
+stay numeric). Permanent bookmark: http://localhost:5317/ via LaunchAgents
+(see CHANGELOG). Confirmed on a 64-state ~35-equation system.
+
+## Implemented (2026-06-12, earlier): local Maple bridge
 
 The "use the browser as a frontend" option, confirmed working by Branden:
 `npm run maple-bridge` (alongside `npm run dev`) starts a local server wrapping

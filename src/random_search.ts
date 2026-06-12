@@ -114,6 +114,10 @@ export type RandomPrSATResult = {
   method: 'random'
   seed: string
   used_maple_bridge?: boolean
+  // Exact rational model (when sat) — plain data, so it survives the
+  // structured clone across the Web Worker boundary; the main thread rebuilds
+  // the `evaluate` closure from it.
+  rational_model?: Record<number, Rational>
   attempts_used: number
   final_fmin?: number           // best numerical objective found across attempts
   solver_output: WrappedSolverResult
@@ -202,7 +206,7 @@ const rationalize_vector_with_eliminated = (
 
 // ---------- Rational-model evaluator for use in PrSATResult.solver_output.evaluate ----------
 
-const build_rational_evaluator = (
+export const build_rational_evaluator = (
   rational_assignments: Record<number, Rational>,
 ) => async (evt_tt: TruthTable, c_or_re: ConstraintOrRealExpr): Promise<FancyEvaluatorOutput> => {
   // Check for free sentence or real variables (not declared in the truth table).
@@ -455,6 +459,7 @@ export const random_pr_sat_wrapped = async (
               evaluate: build_rational_evaluator(found.assignments),
             }, found.fmin)
             result.used_maple_bridge = true
+            result.rational_model = found.assignments
             return result
           }
         }
@@ -465,11 +470,13 @@ export const random_pr_sat_wrapped = async (
   const sat_result = (attempt: number, assignments: Record<number, Rational>, fmin?: number): RandomPrSATResult => {
     const state_assignments: Record<number, ModelAssignmentOutput> = {}
     for (const [k, v] of Object.entries(assignments)) state_assignments[Number(k)] = rational_to_model_assignment(v)
-    return make_result(attempt, {
+    const result = make_result(attempt, {
       status: 'sat',
       state_assignments,
       evaluate: build_rational_evaluator(assignments),
     }, fmin)
+    result.rational_model = assignments
+    return result
   }
 
   const free_indices = elimination.free_indices

@@ -4,6 +4,13 @@
 
 ## 2026-06-12
 
+### Added: Web Worker execution + permanent local install
+
+- **Random Search now runs in a Web Worker** (`src/random_search_worker.ts`), like Z3: translation, equation elimination, Gröbner, Maple-branch search, Nelder-Mead, and exact verification all happen off the main thread. No constraint system can freeze the page; Cancel is a clean `worker.terminate()`. The exact rational model crosses the worker boundary as plain data (`rational_model` on the result) and the main thread rebuilds the model evaluator from it.
+- **Conversion cap** (20,000 terms) on cross-multiplied equation polynomials: 6-letter systems with triple-product equations (64 state variables) exploded the conversion; oversized equations now stay in numeric division form for the cost function. Confirmed working by Branden on a 64-state, ~35-equation hierarchical-model system.
+- **Permanent local install**: `maple_bridge/serve_dist.mjs` (static server with COOP/COEP headers, port 5317) + two LaunchAgents (`org.fitelson.prsat31.web`, `org.fitelson.prsat31.maple` in `~/Library/LaunchAgents`, logs in `~/Library/Logs/prsat31/`) so http://localhost:5317/ and the Maple bridge are always available, surviving reboots.
+- Retitled the app to "PrSAT 3.1 (experimental)"; removed the 3.0 webpage/demo header links.
+
 ### Added: local Maple bridge — browser as frontend, desktop Maple as equation oracle
 
 Confirmed working in-browser by Branden on both benchmark systems. New architecture option for the experimental fork (deployed PrSAT remains 100% in-browser): `npm run maple-bridge` starts a zero-dependency local server (`maple_bridge/server.mjs`, port 31415) that runs `/Applications/Maple 2024/maple` on the cross-multiplied equation polynomials and returns `solve`'s solution branches. The browser (`src/maple_bridge_client.ts` + `src/maple_expr.ts`) parses each rational-function branch back into RealExpr ASTs (RootOf/float branches discarded — sound incompleteness), substitutes into the remaining inequalities, random-searches the branch's free variables, snaps to small fractions, evaluates the solved variables exactly, and verifies the full system in exact rational arithmetic — PrSAT.m's `sol1[[i]]` loop with Maple as the Solve oracle. UI: "Maple bridge: connected/off" indicator next to the Random Search options (click to re-check); result badge shows "via Random Search + Maple bridge". Automatic fallback to the pure-browser pipeline when the bridge is off or no branch certifies. Tests: `src/maple_bridge.spec.ts` (self-skips without the bridge).

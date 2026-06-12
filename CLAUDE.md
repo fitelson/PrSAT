@@ -11,7 +11,17 @@ The goal of 3.1 is to add a **Random Search** solver as an alternative to Z3, po
 ### Random Search — where it shines and where it doesn't
 
 - **Inequalities (strict or non-strict):** Random Search is strong here. The cost function has negative values on a full-measure region of the simplex, so Nelder-Mead reaches it quickly and rationalization almost always snaps to exact rationals that verify.
-- **Local Maple bridge (2026-06-12, latest):** `npm run maple-bridge` starts
+- **Web Worker (2026-06-12, latest):** the UI runs Random Search in a Web
+  Worker (`src/random_search_worker.ts`); never call `random_pr_sat_wrapped`
+  directly on the main thread from UI code. Results carry `rational_model`
+  (plain data) across the worker boundary; the evaluator is rebuilt with
+  `build_rational_evaluator`.
+- **Permanent local install:** http://localhost:5317/ serves the built app via
+  LaunchAgent `org.fitelson.prsat31.web` (`maple_bridge/serve_dist.mjs`, COOP/
+  COEP headers); `org.fitelson.prsat31.maple` keeps the bridge on 31415. After
+  `npm run build`, the bookmark serves the new build immediately. Logs:
+  `~/Library/Logs/prsat31/`.
+- **Local Maple bridge (2026-06-12):** `npm run maple-bridge` starts
   `maple_bridge/server.mjs` (port 31415) wrapping desktop Maple; when reachable,
   Random Search sends the equation system to Maple and searches each rational
   solution branch (`src/maple_bridge_client.ts`, `src/maple_expr.ts`,
