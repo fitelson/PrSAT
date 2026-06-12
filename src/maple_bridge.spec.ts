@@ -55,4 +55,20 @@ describe('maple bridge end-to-end', () => {
     }
     expect(result.solver_output.status).toBe('sat')
   }, 600_000)
+  test('3-wise independence, Regular mode (strictly positive pretty witness): pretty positive witness', async () => {
+    if (!bridge_up) return
+    const constraints = indep_lines.map((l) => (parse_constraint(l) as any)[1])
+    const t0 = Date.now()
+    const result = await random_pr_sat(constraints, { seed: 'regular-1', search_attempts: 15, regular: true, maple_bridge_url: 'http://127.0.0.1:31415' })
+    console.log('status:', result.solver_output.status, 'bridge:', result.used_maple_bridge, 'wall ms:', Date.now() - t0)
+    if (result.solver_output.status === 'sat') {
+      const rm = result.rational_model!
+      const max_den = Object.values(rm).reduce((m, v) => v.d > m ? v.d : m, 1n)
+      const min_val = Object.values(rm).every((v) => v.n > 0n)
+      console.log('MODEL:', Object.entries(rm).map(([k, v]) => `a_${Number(k)+1}=${v.n}/${v.d}`).join(' '))
+      console.log('max denominator:', max_den.toString(), 'all positive:', min_val)
+      expect(min_val).toBe(true)
+      expect(max_den <= 10_000n).toBe(true)
+    }
+  }, 600_000)
 })
