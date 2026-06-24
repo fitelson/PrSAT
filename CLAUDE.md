@@ -79,8 +79,9 @@ The deploy script builds and uploads `dist/.` to the `trivalent` directory. The 
 
 ## Recent Work
 
-- 2026-06-24: Deployed the public fork to `https://fitelson.org/PrSAT/trivalent/`; current deployed commit after the header-copy cleanup is `7430f50`.
-- 2026-06-24: Added the public header note with links to PrSAT and Branden Fitelson, then made it a single paragraph.
+- 2026-06-24: Updated the header's PrSAT link to the project page `https://fitelson.org/PrSAT/`; current deployed app commit is `b623d0d`.
+- 2026-06-24: Deployed the public fork to `https://fitelson.org/PrSAT/trivalent/`.
+- 2026-06-24: Added the public header note with links to the PrSAT project page and Branden Fitelson, then made it a single paragraph.
 - 2026-06-24: Verified that trivalent conditional probabilities are handled as probabilities of the corresponding conditionals in both ERS and CCK.
 - 2026-06-24: Created the public-facing Z3-only PrSAT 3.1 branch. The UI now exposes only the Z3 decision procedure while retaining classical, Trivalent (ERS), and Trivalent (CCK) semantic modes.
 - 2026-06-24: Added Trivalent (CCK) with a pure CCK translator in `src/cck.ts` and a Z3 wrapper in `src/cck_sat.ts`.

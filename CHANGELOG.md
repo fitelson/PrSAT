@@ -10,7 +10,7 @@
 - Removed local-only solver service scripts and implementation files that are not part of the public Z3 app.
 - Deployed the public build to `https://fitelson.org/PrSAT/trivalent/`.
 - Retitled the visible interface as `PrSAT 3.1 (Experimental)` and removed the visible `Decision procedure: Z3` label.
-- Added a single-paragraph public header note with links to PrSAT and Branden Fitelson.
+- Added a single-paragraph public header note with links to the PrSAT project page and Branden Fitelson.
 
 ### Added: Cantwell-Cooper-Kleene trivalent mode
 
