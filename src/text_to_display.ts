@@ -1986,7 +1986,7 @@ const main = (): HTMLElement => {
       el('div', { class: 'header-intro' },
         'PrSAT 3.1 (Experimental) is a decision procedure for classical and trivalent probability satisfiability. ' +
         'It uses the same syntax as ',
-        el('a', { href: 'https://fitelson.org/PrSAT/dist/' }, 'PrSAT'),
+        el('a', { href: 'https://fitelson.org/PrSAT/' }, 'PrSAT'),
         ', with optional Trivalent (ERS) and Trivalent (CCK) interpretations of conditionals. ' +
         'In the trivalent modes, conditional probabilities "Pr(X | Y)" are probabilities of the corresponding conditionals "Pr(Y -> X)", using the selected theory\'s rules. ' +
         'Please report any bugs to ',
