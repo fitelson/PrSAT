@@ -390,6 +390,13 @@ input::file-selector-button:hover {
   color: white;
 }
 
+.header-intro {
+  margin-top: 0.45em;
+  max-width: 72ch;
+  white-space: pre-line;
+  line-height: 1.35;
+}
+
 .header a {
   color: var(--accent-light);
 }
