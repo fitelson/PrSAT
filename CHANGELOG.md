@@ -8,6 +8,9 @@
 - Removed the alternate solver UI and kept Z3 as the only decision procedure.
 - Kept all three semantic modes: Classical, Trivalent (ERS), and Trivalent (CCK).
 - Removed local-only solver service scripts and implementation files that are not part of the public Z3 app.
+- Deployed the public build to `https://fitelson.org/PrSAT/trivalent/`.
+- Retitled the visible interface as `PrSAT 3.1 (Experimental)` and removed the visible `Decision procedure: Z3` label.
+- Added a single-paragraph public header note with links to PrSAT and Branden Fitelson.
 
 ### Added: Cantwell-Cooper-Kleene trivalent mode
 
@@ -16,6 +19,7 @@
 - CCK uses `3^n` atomic rows with `T/N/F` values, strong Kleene `~`, `&`, and `v`, Cooper `->`, and Cantwell probability over true-plus-false rows.
 - Pure CCK translation lives in `src/cck.ts`; the Z3 wrapper lives in `src/cck_sat.ts`.
 - Model tables display CCK atomic rows with `T`, `N`, and `F`; ERS/classical tables remain bivalent.
+- In both trivalent modes, conditional probabilities `Pr(B | A)` are translated as probabilities of the corresponding conditionals `Pr(A -> B)` under the selected theory's rules.
 
 ## 2026-06-23
 

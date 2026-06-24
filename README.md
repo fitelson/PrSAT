@@ -2,6 +2,10 @@
 
 PrSAT is a browser-based probability satisfiability checker. This public-facing 3.1 branch exposes the Z3 decision procedure with classical, Trivalent (ERS), and Trivalent (CCK) semantic modes.
 
+Live public build: https://fitelson.org/PrSAT/trivalent/
+
+This branch is the public Z3-only fork. The full local experimental 3.1 version, including Random Search, is kept separately.
+
 ## Contributors
 
 - [Koissi Adjorlolo](https://github.com/imapersonman)
@@ -31,3 +35,11 @@ npm run dev
 ```
 
 A link to PrSAT running locally will appear in your terminal.
+
+## Deployment
+
+```
+npm run deploy
+```
+
+The deploy script builds the app and uploads `dist/.` to `fitelson.org:/home/fitelson/www/www/PrSAT/trivalent/`.
