@@ -79,6 +79,21 @@ describe('Cantwell-Cooper-Kleene trivalent semantics', () => {
       ))
   })
 
+  test('Pr(B | A) is CCK conditional probability Pr(A -> B)', () => {
+    const A = S.letter('A')
+    const B = S.letter('B')
+    const tt = make_cck_tt(A, B)
+
+    expect(translate_real_expr_cck(tt, R.cpr(B, A)))
+      .toEqual(translate_real_expr_cck(tt, R.pr(S.imp(A, B))))
+    expect(translate_real_expr_cck(tt, R.cpr(B, A)))
+      .toEqual(R.ite(
+        { tag: 'equal', left: R.svs([0, 2, 3, 5]), right: R.lit(0) },
+        R.lit(1),
+        R.divide(R.svs([0, 3]), R.svs([0, 2, 3, 5])),
+      ))
+  })
+
   test('non-one totalized probability equations translate with residual totalization constraints', () => {
     const constraints = [
       parse('Pr(P -> Q) = 1/4'),
