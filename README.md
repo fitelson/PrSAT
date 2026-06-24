@@ -2,6 +2,7 @@
 
 - [Koissi Adjorlolo](https://github.com/imapersonman)
 - [Claude](https://claude.ai/code) (AI pair programmer)
+- [Codex](https://openai.com/codex/) (AI pair programmer)
 - [Branden Fitelson](https://github.com/fitelson)
 
 ## Installation
@@ -15,7 +16,7 @@
 ### Steps
 1. Open your terminal of choice (could be in VSCode).
 2. Navigate to desired directory.
-3. Run `git clone https://github.com/imapersonman/PrSAT.git`.
+3. Run `git clone https://github.com/fitelson/PrSAT.git`.
 4. Run `cd PrSAT`.
 5. Run `npm install`.
 

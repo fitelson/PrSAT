@@ -136,6 +136,9 @@ export type FancyEvaluatorOutput =
 export const fancy_evaluate_constraint_or_real_expr = async <CtxKey extends string>(ctx: Context<CtxKey>, model: Model<CtxKey>, tt: TruthTable, c_or_re: ConstraintOrRealExpr): Promise<FancyEvaluatorOutput> => {
   const free_sentence_vars = free_sentence_variables_in_constraint_or_real_expr(c_or_re, new LetterSet(), new LetterSet([...tt.letters()]))
   const free_real_vars = free_real_variables_in_constraint_or_real_expr(c_or_re, new Set<string>())
+  for (const declared of tt.variables.real) {
+    free_real_vars.delete(declared)
+  }
 
   if (!free_sentence_vars.is_empty() || free_real_vars.size > 0) {
     return { tag: 'undeclared-vars', variables: { sentence: [...free_sentence_vars], real: [...free_real_vars] } }
@@ -230,12 +233,12 @@ export const model_assignment_output_to_string = (output: ModelAssignmentOutput)
   } else if (output.tag === 'negative') {
     return `-${wrap(output.inner)}`
   } else if (output.tag === 'rational') {
-    return `${wrap(output.numerator)} / ${output.denominator}`
+    return `${wrap(output.numerator)} / ${wrap(output.denominator)}`
   } else if (output.tag === 'root-obj') {
     return `(root-obj ${output.index} (${wrap(output.a)} * x^2 + ${wrap(output.b)} * x + ${wrap(output.c)}))`
   } else if (output.tag === 'generic-root-obj') {
     const terms_str = output.coefficients.map((c, index) => {
-      const exp = output.coefficients.length - index
+      const exp = output.coefficients.length - index - 1
       if (exp === 0) {
         return c
       } else if (exp === 1) {
@@ -436,6 +439,11 @@ export const parse_to_assignment = (s: S): ModelAssignmentOutput => {
             largest_exp = Math.max(largest_exp, exp)
             previous_exp = exp
           }
+          if (previous_exp !== undefined) {
+            for (let exp_gap = previous_exp - 1; exp_gap >= 0; exp_gap--) {
+              coefficients.push(0)
+            }
+          }
           
           const index_s = assert_exists(t[2], 'missing index!')
           const index = typeof index_s === 'string' ? assert_result(parse_int(index_s))
@@ -461,7 +469,7 @@ export const model_assignment_output_to_s = (output: ModelAssignmentOutput): S =
     return ['root-obj', ['+', ['*', sub(output.a), ['^', 'x', '2']], ['*', sub(output.b), 'x'], sub(output.c)], '2']
   } else if (output.tag === 'generic-root-obj') {
     const terms = output.coefficients.map((c, index) => {
-      const exp = output.coefficients.length - index
+      const exp = output.coefficients.length - index - 1
       if (exp === 0) {
         return c
       } else if (exp === 1) {
@@ -497,8 +505,8 @@ export const model_to_assigned_exprs = async <CtxKey extends string>(ctx: Contex
       continue
     }
     const name = decl.name().toString()
-    if (name.length < 3) {
-      throw new Error(`Expected model entry name to be of length at least 3!\nname: ${name.length}`)
+    if (!/^a_[1-9][0-9]*$/.test(name)) {
+      continue
     }
     const index_str = name.substring(2)
     const parsed_index = parseInt(index_str)
@@ -546,7 +554,7 @@ export const real_expr_to_arith = <CtxKey extends string>(ctx: Context<CtxKey>, 
   } else if (expr.tag === 'given_probability') {
     throw new Error('Unable to convert conditional probability to a Z3 arith expression!')
   } else if (expr.tag === 'literal') {
-    return ctx.Real.val(expr.value)
+    return ctx.Real.val(expr.source ?? expr.value)
   } else if (expr.tag === 'minus') {
     return ctx.Sub(sub(expr.left), sub(expr.right))
   } else if (expr.tag === 'multiply') {
@@ -556,7 +564,27 @@ export const real_expr_to_arith = <CtxKey extends string>(ctx: Context<CtxKey>, 
   } else if (expr.tag === 'plus') {
     return ctx.Sum(sub(expr.left), sub(expr.right))
   } else if (expr.tag === 'power') {
-    throw new Error('Unable to convert exponent to Z3 arith expression (be careful where real_expr_to_arith is called!)')
+    const integer_literal = (e: RealExpr): number | undefined => {
+      if (e.tag === 'literal' && Number.isSafeInteger(e.value)) {
+        return e.value
+      } else if (e.tag === 'negative' && e.expr.tag === 'literal' && Number.isSafeInteger(e.expr.value)) {
+        return -e.expr.value
+      } else {
+        return undefined
+      }
+    }
+    const exp = integer_literal(expr.exponent)
+    if (exp === undefined) {
+      throw new Error('Model evaluator exponentiation requires an integer literal exponent.')
+    }
+    const base = sub(expr.base)
+    const product = (count: number): Arith<CtxKey> => {
+      if (count === 0) {
+        return ctx.Real.val(1)
+      }
+      return ctx.Product(base, ...Array.from({ length: count - 1 }, () => base))
+    }
+    return exp < 0 ? ctx.Div(ctx.Real.val(1), product(-exp)) : product(exp)
   } else if (expr.tag === 'probability') {
     throw new Error('Unable to convert probability to a Z3 arith expression!')
   } else if (expr.tag === 'state_variable_sum') {
@@ -568,7 +596,7 @@ export const real_expr_to_arith = <CtxKey extends string>(ctx: Context<CtxKey>, 
       return ctx.Sum(first_var_expr, ...rest_var_exprs)
     }
   } else if (expr.tag === 'variable') {
-    throw new Error('Unable to convert variable to Z3 arith expression (be careful where real_expr_to_arith is called!)')
+    return ctx.Const(expr.id, ctx.Real.sort())
   } else {
     return fallthrough('real_expr_to_arith', expr)
   }
@@ -711,6 +739,7 @@ export type ModelEvaluatorFactory = <CtxKey extends string>(ctx: Context<CtxKey>
 
 type SolverOptions2 = {
   regular: boolean
+  timeout_ms: number
   abort_signal?: AbortSignal
   cancel_fallback?: () => Promise<undefined>
   onTranslated?: (translated: Constraint[]) => void
@@ -718,6 +747,7 @@ type SolverOptions2 = {
 
 const DEFAULT_SOLVER_OPTIONS2: SolverOptions2 = {
   regular: false,
+  timeout_ms: 30_000,
   abort_signal: undefined,
 }
 
@@ -738,7 +768,7 @@ export const pr_sat_wrapped = async (
   constraints: Constraint[],
   options?: Partial<SolverOptions2>,
 ): Promise<PrSATResult> => {
-  const { regular, abort_signal, cancel_fallback, onTranslated } = { ...DEFAULT_SOLVER_OPTIONS2, ...(options ?? {}) }
+  const { regular, timeout_ms, abort_signal, cancel_fallback, onTranslated } = { ...DEFAULT_SOLVER_OPTIONS2, ...(options ?? {}) }
 
   const translated = translate(tt, constraints)
   onTranslated?.(translated)
@@ -749,7 +779,7 @@ export const pr_sat_wrapped = async (
   const smtlib_lines = constraints_to_smtlib_lines(tt, index_to_eliminate, elim_constraints)
   const smtlib_string = smtlib_lines.map((s) => s_to_string(s, false)).join('\n')
   // const result = await solver.solve(smtlib_lines, abort_signal, cancel_fallback)
-  const result = await solver.solve(smtlib_string, abort_signal, cancel_fallback)
+  const result = await solver.solve(smtlib_string, timeout_ms, abort_signal, cancel_fallback)
   const output_constraints = {
     original: constraints,
     translated,
@@ -851,6 +881,7 @@ export class WrappedSolver {
 
   async solve_with_evaluator(
     smtlib_string: string,
+    timeout_ms: number,
     make_evaluator: ModelEvaluatorFactory,
     abort_signal?: AbortSignal,
     cancel_fallback?: () => Promise<undefined>,
@@ -874,6 +905,7 @@ export class WrappedSolver {
 
         const used_ctx = this.z3_interface.Context('main')
         const solver = new used_ctx.Solver('QF_NRA')
+        solver.set('timeout', timeout_ms)
         // const smtlib_lines_string = smtlib_lines.map((s) => s_to_string(s, false)).join('\n')
         const smtlib_lines_string = smtlib_string
 
@@ -924,10 +956,15 @@ export class WrappedSolver {
     )
   }
 
-  // async solve(smtlib_lines: S[], abort_signal?: AbortSignal, cancel_fallback?: () => Promise<undefined>): Promise<WrappedSolverResult> {
-  async solve(smtlib_string: string, abort_signal?: AbortSignal, cancel_fallback?: () => Promise<undefined>): Promise<WrappedSolverResult> {
+  async solve(
+    smtlib_string: string,
+    timeout_ms: number,
+    abort_signal?: AbortSignal,
+    cancel_fallback?: () => Promise<undefined>,
+  ): Promise<WrappedSolverResult> {
     return await this.solve_with_evaluator(
       smtlib_string,
+      timeout_ms,
       (ctx, model) => async (tt: TruthTable, c_or_re: ConstraintOrRealExpr): Promise<FancyEvaluatorOutput> =>
         await fancy_evaluate_constraint_or_real_expr(ctx, model, tt, c_or_re),
       abort_signal,

@@ -20,4 +20,5 @@ describe('interpret', () => {
   test('412', () => expect(interpret(412)).toEqual(412))
   test('(+ 1 412)', () => expect(interpret(['+', 1, 412])).toEqual(413))
   test('(+ 1 (+ 3 2))', () => expect(interpret(['+', 1, ['+', 3, 2]])).toEqual(6))
+  test('does not prefix-match longer lists', () => expect(() => interpret(['+', 1, 2, 3])).toThrow())
 })

@@ -69,7 +69,7 @@ export const real_expr_to_html = (expr: RealExpr, wrap_in_math_element: boolean)
   const s2h = sentence_to_html
   const sub = (expr: RealExpr): MathMLElement => {
     if (expr.tag === 'literal') {
-      return math_el('mi', {}, expr.value.toString())
+      return math_el('mi', {}, expr.source ?? expr.value.toString())
     } else if (expr.tag === 'variable') {
       return math_el('mi', {}, expr.id)
     } else if (expr.tag === 'probability') {

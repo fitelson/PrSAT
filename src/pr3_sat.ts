@@ -90,6 +90,7 @@ export const fancy_evaluate_constraint_or_real_expr_cooper = async <CtxKey exten
 
 type Pr3SolverOptions = {
   regular: boolean
+  timeout_ms: number
   abort_signal?: AbortSignal
   cancel_fallback?: () => Promise<undefined>
   onTranslated?: (translated: Constraint[]) => void
@@ -97,6 +98,7 @@ type Pr3SolverOptions = {
 
 const DEFAULT_PR3_SOLVER_OPTIONS: Pr3SolverOptions = {
   regular: false,
+  timeout_ms: 30_000,
   abort_signal: undefined,
 }
 
@@ -108,7 +110,7 @@ export const pr3_sat_wrapped = async (
   constraints: Constraint[],
   options?: Partial<Pr3SolverOptions>,
 ): Promise<Pr3SATResult> => {
-  const { regular, abort_signal, cancel_fallback, onTranslated } = { ...DEFAULT_PR3_SOLVER_OPTIONS, ...(options ?? {}) }
+  const { regular, timeout_ms, abort_signal, cancel_fallback, onTranslated } = { ...DEFAULT_PR3_SOLVER_OPTIONS, ...(options ?? {}) }
 
   const translated = translate_constraints_cooper(tt, constraints)
   onTranslated?.(translated)
@@ -120,6 +122,7 @@ export const pr3_sat_wrapped = async (
   const smtlib_string = smtlib_lines.map((s) => s_to_string(s, false)).join('\n')
   const result = await solver.solve_with_evaluator(
     smtlib_string,
+    timeout_ms,
     (ctx, model) => async (evt_tt: TruthTable, c_or_re: ConstraintOrRealExpr): Promise<FancyEvaluatorOutput> =>
       await fancy_evaluate_constraint_or_real_expr_cooper(ctx, model, evt_tt, c_or_re),
     abort_signal,

@@ -15,11 +15,11 @@ To insert a [Constraint], type in one of:
 - '[RealExpr] ≠ [RealExpr]' or '[RealExpr] != [RealExpr]' for disequality,
 - '[RealExpr] < [RealExpr]' for less than,
 - '[RealExpr] > [RealExpr]' for greater than,
-- '[RealExpr] ≤ [RealExpr]' or '[RealExpr] <= [RealExpr] for less than or equal to,'
-- '[RealExpr] ≥ [RealExpr]' or '[RealExpr] >= [RealExpr] for greater than or equal to,'
+- '[RealExpr] ≤ [RealExpr]' or '[RealExpr] <= [RealExpr]' for less than or equal to,
+- '[RealExpr] ≥ [RealExpr]' or '[RealExpr] >= [RealExpr]' for greater than or equal to,
 - '~[Constraint]', '![Constraint]', or '-[Constraint]' for negation,
 - '[Constraint] ∨ [Constraint]', '[Constraint] \\/ [Constraint]', or '[Constraint] v [Constraint]' for disjunction,
-- '[Constraint] & [Constraint]' for conjunction,
+- '[Constraint] & [Constraint]' or '[Constraint] /\\ [Constraint]' for conjunction,
 - '[Constraint] → [Constraint]', '[Constraint] -> [Constraint]', or '[Constraint] > [Constraint]' for conditional,
 - '[Constraint] ↔ [Constraint]', '[Constraint] <-> [Constraint]', or '[Constraint] <> [Constraint]' for biconditional.
 
@@ -40,7 +40,7 @@ To insert a [Sentence], type in one of:
 - Any upper-case letter for propositional variable, optionally followed by an integer > 0,
 - '~[Sentence]', '![Sentence]', or '-[Sentence]' for negation,
 - '[Sentence] ∨ [Sentence]', '[Sentence] \\/ [Sentence]', or '[Sentence] v [Sentence]' for disjunction,
-- '[Sentence] & [Sentence]' for conjunction,
+- '[Sentence] & [Sentence]' or '[Sentence] /\\ [Sentence]' for conjunction,
 - '[Sentence] → [Sentence]', '[Sentence] -> [Sentence]', or '[Sentence] > [Sentence]' for conditional,
 - '[Sentence] ↔ [Sentence]', '[Sentence] <-> [Sentence]', or '[Sentence] <> [Sentence]' for biconditional.
 `.trim()
@@ -62,4 +62,3 @@ export const NO_MODEL = 'No model to evaluate!'
 
 export const CANCEL_OVERRIDE_TIMEOUT_MS = 5 * 1000
 export const DEFAULT_SOLVE_TIMEOUT_MS = 1 * 1000 * 60
-

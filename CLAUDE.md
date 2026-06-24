@@ -96,7 +96,7 @@ Simplification extracts perfect squares from radical, reduces by GCD.
 
 ```bash
 npm run dev              # Local dev server at localhost:5173
-npm run build            # TypeScript compile + Vite build
+npm run build            # Refresh Z3 assets, TypeScript compile, Vite build
 npx vitest --run         # Unit tests only (fast)
 npm test                 # Unit + Playwright e2e tests (slower)
 npx vitest --allowOnly   # Run single test (add .only to test)
@@ -119,7 +119,7 @@ The same connective symbols (`~`/`-`/`!`, `&`/`/\`, `v`/`\/`/`∨`, `->`/`>`/`�
 - **Sentence-level** (inside `Pr(...)`): join statements of propositional calculus. E.g. `Pr(A & B) = 1/4`, `Pr(A <-> B) = 1`.
 - **Constraint-level** (outside `Pr(...)`): join whole probabilistic constraints into a single compound `Constraint`. E.g. `Pr(A) = 1/2 & Pr(B) = 1/2`, `~(Pr(A) = Pr(B))`, `(c1 & c2) <-> c3`.
 
-Symbols are defined identically in `src/pr_sat.ts` (`possible_constraint_connectives` ≈ line 548, `possible_sentence_connectives` ≈ line 696). The constraint-level translation to Z3 lives in `constraint_to_bool` in `src/z3_integration.ts`. Compound metalinguistic constraints have always been supported — this enables single-input theorem-checking by entering the negation of a putative theorem and looking for UNSAT.
+Symbols are defined identically in `src/pr_sat.ts` (`possible_constraint_connectives`, `possible_sentence_connectives`). The browser Find Model path emits SMT-LIB via `constraint_to_smtlib` / `real_expr_to_smtlib` in `src/pr_sat.ts`; the model evaluator uses `constraint_to_bool` / `real_expr_to_arith` in `src/z3_integration.ts`. Compound metalinguistic constraints have always been supported — this enables single-input theorem-checking by entering the negation of a putative theorem and looking for UNSAT.
 
 ## Companion: Mathematica PrSAT Reference
 
@@ -127,8 +127,12 @@ Lives at `../PrSAT 3.0/PrSAT_3_Mathematica/` (separate from the TS source-of-tru
 
 Standalone PoC for experimenting: `mathematica_compiled_random/CompiledRandomSearch.m` + `benchmark.m` + `README.md` in this folder. Run benchmark with `WolframKernel=/Applications/Wolfram.app/Contents/MacOS/WolframKernel wolframscript -file benchmark.m` (the env var override is required on this machine; plain `wolframscript` errors with "WolframKernel location could not be determined").
 
-## Recent Work (2026-01/04)
+## Recent Work (2026)
 
+- **2026-06-23:** Added experimental Pr3SAT/trivalent probability mode in the 3.1 fork, with a `Trivalent (ERS)` UI toggle, Cooper semantics for `->`, trivalent model evaluation, and Random Search support through the same semantics flag. Browser CAS alternatives for Random Search equation solving were tested; Maple remains the supported optional equation-solving bridge. Fixed trivalent Random Search + Maple branch verification for zero-denominator `ite` expressions. Verification: `npm run build` and `npx vitest --run` pass (700 passed, 1 skipped).
+- **2026-06-12:** Added Decimals/Fractions toggle button to the Evaluate model toolbar (4-decimal approximations of evaluation results; ported from the 3.1 experimental fork).
+- **2026-06-10:** Fixed the June 2026 bug-review set: critical SMT-LIB soundness bugs for nested `=>`, subtraction, and division; exponentiation handling; parser backtracking; exact numeric literal preservation; local conditional-probability denominator guards; free real-variable declaration/evaluation; native Z3 timeout on the wrapped solver path; UI/input async races; model/root display bugs; deploy dotfile upload; production cache headers. Verification: `npm run build` and `npx vitest --run` pass.
+- **2026-06-10:** Hid the internal one-state `a_i` truth-table/model UI for arithmetic-only constraints with no sentence letters; these cases now show only SAT/UNSAT, save buttons, and translated constraints.
 - **2026-04-25:** Compiled-NM random search backported into the Mathematica PrSAT reference. See `CHANGELOG.md` entry for details.
 - **2026-04-18:** Upgraded `z3-solver` 4.15.4 → 4.16.0 and refreshed bundled WASM assets
 - **2026-04-18:** Documented the two-level connective overloading on the project webpage; fixed in-app help typo where `->`/`→`/`>` was labeled "biconditional"

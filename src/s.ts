@@ -104,7 +104,7 @@ const attempt_match = (s: S, vars: Record<string, SType>, pattern: ClausePattern
     } else if (typeof pattern === 'number' && typeof s === 'number' && pattern === s) {
       return acc
     } else if (Array.isArray(pattern) && Array.isArray(s)) {
-      if (pattern.length > s.length) {
+      if (pattern.length !== s.length) {
         return undefined
       }
       let pm = acc
@@ -180,4 +180,3 @@ export const clause = <const Vars extends Record<string, SType>, const R>(vars: 
 export const default_clause = <R>(f: (m: SMatch<{ s: 's' }>) => R): MatchSClause<{ s: 's' }, R> => {
   return [{ s: 's' }, spv('s'), f]
 }
-

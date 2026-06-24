@@ -138,6 +138,7 @@ export const split_input = <ParseOutput extends {}>(
   }
 
   logic.on_state_change(async (state) => {
+    const state_at_start = logic.get_output()
     output_container.innerHTML = ''
     output_container.style.display = 'none'
     error_info_container.innerHTML = ''
@@ -149,6 +150,9 @@ export const split_input = <ParseOutput extends {}>(
       // Some kind of queuing system to wrap z3 is necessary.
       // LAME.
       const output_element = await call_display_func(display, state.output)
+      if (logic.get_output() !== state_at_start) {
+        return
+      }
       output_container.appendChild(output_element)
       output_container.style.display = 'inline'
       info_button.value = INFO_MESSAGE_OKAY
@@ -267,6 +271,10 @@ const set_disabled_for_all_children = (e: HTMLElement, disabled: boolean) => {
   for (const e of inputs) {
     e.disabled = disabled
   }
+  const textareas = e.getElementsByTagName('textarea')
+  for (const e of textareas) {
+    e.disabled = disabled
+  }
 }
 
 const batch_input_block = <ParseOutput extends {}>(
@@ -303,7 +311,9 @@ const batch_input_block = <ParseOutput extends {}>(
   return {
     element,
     set_fields: (fields) => {
-      batch_logic.text.set(fields.join('\n'))
+      const text = fields.join('\n')
+      batch_logic.text.set(text)
+      textbox.value = text
     },
     set_disabled: (disabled) => {
       set_disabled_for_all_children(element, disabled)
@@ -366,14 +376,20 @@ export const generic_input_block = <ParseOutput extends {}>(
   let copy_message_animation_timer: ReturnType<typeof setTimeout> | undefined = undefined
   copy_button.onclick = async () => {
     const all_text = block.get_fields().join('\n')
-    await navigator.clipboard.writeText(all_text)
-    copy_message_container.classList.add('show')
-    copy_button.disabled = true
-    copy_message_animation_timer = setTimeout(() => {
-      copy_message_container.classList.remove('show')
-      copy_button.disabled = false
-      clearTimeout(copy_message_animation_timer)
-    }, 800)  // This value needs to align with animation-duration in .copy-message.show!
+    try {
+      await navigator.clipboard.writeText(all_text)
+      copy_message_container.textContent = 'Copied Constraints!'
+      copy_message_container.classList.add('show')
+      copy_button.disabled = true
+      copy_message_animation_timer = setTimeout(() => {
+        copy_message_container.classList.remove('show')
+        copy_button.disabled = false
+        clearTimeout(copy_message_animation_timer)
+      }, 800)  // This value needs to align with animation-duration in .copy-message.show!
+    } catch (e: any) {
+      copy_message_container.textContent = `Copy failed: ${e.message ?? String(e)}`
+      copy_message_container.classList.add('show')
+    }
   }
 
   file_loader.onchange = async () => {
@@ -382,6 +398,7 @@ export const generic_input_block = <ParseOutput extends {}>(
     const f = assert_exists(files[0], 'files[0] is null!')
     batch_logic.text.set(await f.text())
     await batch_logic.send()
+    file_loader.value = ''
   }
 
   const element = tel(test_ids.id, 'div', { class: 'generic-input-block' },

@@ -275,8 +275,7 @@ describe('display logic', () => {
         const on_focus = watch_f((_: boolean) => undefined)
         input.on_focus(on_focus.f)
         input.set_focused()
-        // Should be 1 but is 2.
-        expect(on_focus.calls).toEqual({ tag: 'called-with', input: true, count: 2 })
+        expect(on_focus.calls).toEqual({ tag: 'not-called' })
       })
       test('adding multiple', () => {
         const block = new InputBlockLogic(parse_constraint, () => undefined)
@@ -285,27 +284,22 @@ describe('display logic', () => {
         const on_input0_focus = watch_f((_: boolean) => undefined)
         input0.on_focus(on_input0_focus.f)
         input0.set_focused()
-        // Should be 1 but is 2.
-        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: true, count: 2 })
+        expect(on_input0_focus.calls).toEqual({ tag: 'not-called' })
 
         const input1 = block.insert_input_after(input0)
         const on_input1_focus = watch_f((_: boolean) => undefined)
         input1.on_focus(on_input1_focus.f)
         input1.set_focused()
-        // Should be 2 but is 3.
-        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: false, count: 3 })
-        // Should be 1 but is 2.
-        expect(on_input1_focus.calls).toEqual({ tag: 'called-with', input: true, count: 2 })
+        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: false, count: 1 })
+        expect(on_input1_focus.calls).toEqual({ tag: 'not-called' })
 
         const input2 = block.insert_input_after(input1)
         const on_input2_focus = watch_f((_: boolean) => undefined)
         input2.on_focus(on_input2_focus.f)
         input2.set_focused()
-        // Should be 2 but is 3.
-        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: false, count: 3 })
-        expect(on_input1_focus.calls).toEqual({ tag: 'called-with', input: false, count: 3 })
-        // Should be 1 but is 2.
-        expect(on_input2_focus.calls).toEqual({ tag: 'called-with', input: true, count: 2 })
+        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: false, count: 1 })
+        expect(on_input1_focus.calls).toEqual({ tag: 'called-with', input: false, count: 1 })
+        expect(on_input2_focus.calls).toEqual({ tag: 'not-called' })
       })
       test('focus previous/next', () => {
         const block = make_block()
@@ -314,78 +308,54 @@ describe('display logic', () => {
         const on_input0_focus = watch_f((_: boolean) => undefined)
         input0.on_focus(on_input0_focus.f)
         input0.set_focused()
-        // Should be 1 but its 2.
-        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: true, count: 2 })
+        expect(on_input0_focus.calls).toEqual({ tag: 'not-called' })
 
         const input1 = block.insert_input_after(input0)
         const on_input1_focus = watch_f((_: boolean) => undefined)
         input1.on_focus(on_input1_focus.f)
         input1.set_focused()
-        // Should be 2 but its 3.
-        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: false, count: 3 })
-        // Should be 1 but its 2.
-        expect(on_input1_focus.calls).toEqual({ tag: 'called-with', input: true, count: 2 })
+        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: false, count: 1 })
+        expect(on_input1_focus.calls).toEqual({ tag: 'not-called' })
 
         const input2 = block.insert_input_after(input1)
         const on_input2_focus = watch_f((_: boolean) => undefined)
         input2.on_focus(on_input2_focus.f)
         input2.set_focused()
-        // Should be 2 but its 3.
-        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: false, count: 3 })
-        // Should be 2 but its 3.
-        expect(on_input1_focus.calls).toEqual({ tag: 'called-with', input: false, count: 3 })
-        // Should be 1 but is 2.
-        expect(on_input2_focus.calls).toEqual({ tag: 'called-with', input: true, count: 2 })
+        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: false, count: 1 })
+        expect(on_input1_focus.calls).toEqual({ tag: 'called-with', input: false, count: 1 })
+        expect(on_input2_focus.calls).toEqual({ tag: 'not-called' })
 
         input2.focus_previous()
-        // Should be 2 but is 3.
-        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: false, count: 3 })
-        // Should be 3 but is 4.
-        expect(on_input1_focus.calls).toEqual({ tag: 'called-with', input: true, count: 4 })
-        // Should be 2 but is 3.
-        expect(on_input2_focus.calls).toEqual({ tag: 'called-with', input: false, count: 3 })
+        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: false, count: 1 })
+        expect(on_input1_focus.calls).toEqual({ tag: 'called-with', input: true, count: 2 })
+        expect(on_input2_focus.calls).toEqual({ tag: 'called-with', input: false, count: 1 })
 
         input1.focus_previous()
-        // Should be 3 but is 4.
-        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: true, count: 4 })
-        // Should be 4 but is 5.
-        expect(on_input1_focus.calls).toEqual({ tag: 'called-with', input: false, count: 5 })
-        // Should be 2 but is 3.
-        expect(on_input2_focus.calls).toEqual({ tag: 'called-with', input: false, count: 3 })
+        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: true, count: 2 })
+        expect(on_input1_focus.calls).toEqual({ tag: 'called-with', input: false, count: 3 })
+        expect(on_input2_focus.calls).toEqual({ tag: 'called-with', input: false, count: 1 })
 
         input0.focus_previous()  // Can't focus previous anymore so don't!
-        // Should be 3 but is 4.
-        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: true, count: 4 })
-        // Should be 4 but is 5.
-        expect(on_input1_focus.calls).toEqual({ tag: 'called-with', input: false, count: 5 })
-        // Should be 2 but is 3.
-        expect(on_input2_focus.calls).toEqual({ tag: 'called-with', input: false, count: 3 })
+        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: true, count: 2 })
+        expect(on_input1_focus.calls).toEqual({ tag: 'called-with', input: false, count: 3 })
+        expect(on_input2_focus.calls).toEqual({ tag: 'called-with', input: false, count: 1 })
 
         // Going back the other way.
 
         input0.focus_next()
-        // Should be 4 but is 5.
-        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: false, count: 5 })
-        // Should be 5 but is 6
-        expect(on_input1_focus.calls).toEqual({ tag: 'called-with', input: true, count: 6 })
-        // Should be 2 but is 3.
-        expect(on_input2_focus.calls).toEqual({ tag: 'called-with', input: false, count: 3 })
+        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: false, count: 3 })
+        expect(on_input1_focus.calls).toEqual({ tag: 'called-with', input: true, count: 4 })
+        expect(on_input2_focus.calls).toEqual({ tag: 'called-with', input: false, count: 1 })
 
         input1.focus_next()
-        // Should be 4 but is 5.
-        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: false, count: 5 })
-        // Should be 6 but is 7.
-        expect(on_input1_focus.calls).toEqual({ tag: 'called-with', input: false, count: 7 })
-        // Should be 3 but is 4.
-        expect(on_input2_focus.calls).toEqual({ tag: 'called-with', input: true, count: 4 })
+        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: false, count: 3 })
+        expect(on_input1_focus.calls).toEqual({ tag: 'called-with', input: false, count: 5 })
+        expect(on_input2_focus.calls).toEqual({ tag: 'called-with', input: true, count: 2 })
 
         input2.focus_next()  // Can't focus next anymore so don't!
-        // Should be 4 but is 5.
-        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: false, count: 5 })
-        // Should be 6 but is 7.
-        expect(on_input1_focus.calls).toEqual({ tag: 'called-with', input: false, count: 7 })
-        // Should be 3 but is 4.
-        expect(on_input2_focus.calls).toEqual({ tag: 'called-with', input: true, count: 4 })
+        expect(on_input0_focus.calls).toEqual({ tag: 'called-with', input: false, count: 3 })
+        expect(on_input1_focus.calls).toEqual({ tag: 'called-with', input: false, count: 5 })
+        expect(on_input2_focus.calls).toEqual({ tag: 'called-with', input: true, count: 2 })
       })
     })
     describe('set_fields', () => {
@@ -395,7 +365,7 @@ describe('display logic', () => {
         block.on_ready(on_ready.f)
         await block.set_fields([])
         expect(on_ready.calls).toEqual({ tag: 'called-with', input: [], count: 1 })
-        expect(block.n_inputs()).toEqual(0)
+        expect(block.n_inputs()).toEqual(1)
       })
       test('non-empty parseable', async () => {
         const block = new InputBlockLogic(parse_constraint, () => undefined)

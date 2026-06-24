@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest"
 
 import { Random } from "./random"
 import { assert, assert_exists } from "./utils"
-import { evaluate_constraint_2, a2eid, combine_inverse, constraint_builder, eliminate_state_variable_index_in_svs, evaluate_real_expr, evaluate_real_expr_2, evaluate_sentence, parse_s, random_letters_and_assignments, real_expr_to_smtlib, real_expr_to_string, RealExprFuzzer, recursively_evaluate_sentence, SentenceFuzzer, state_from_index, translate_constraint, translate_real_expr, TruthTable, constraint_to_string, evaluate_constraint, ConstraintFuzzer, free_real_variables_in_constraint_or_real_expr } from "./pr_sat"
+import { evaluate_constraint_2, a2eid, combine_inverse, constraint_builder, constraint_to_smtlib, constraints_to_smtlib_lines, eliminate_state_variable_index_in_svs, enrich_constraints, evaluate_real_expr, evaluate_real_expr_2, evaluate_sentence, parse_s, random_letters_and_assignments, real_expr_to_smtlib, real_expr_to_string, RealExprFuzzer, recursively_evaluate_sentence, SentenceFuzzer, state_from_index, translate, translate_constraint, translate_real_expr, TruthTable, constraint_to_string, evaluate_constraint, ConstraintFuzzer, free_real_variables_in_constraint_or_real_expr, variables_in_constraints } from "./pr_sat"
 import { PrSat, PrSatFuncs as PrSatUtils, SentenceMap } from "./types"
 
 type Sentence = PrSat['Sentence']
@@ -23,7 +23,7 @@ const multiply = (left: RealExpr, right: RealExpr): RealExpr => times({ left, ri
 const minus = (left: RealExpr, right: RealExpr): RealExpr => subtract({ left, right })
 const divide = (numerator: RealExpr, denominator: RealExpr): RealExpr => over({ numerator, denominator })
 
-const { eq } = constraint_builder
+const { eq, cimp, cor } = constraint_builder
 const make_tt = (letters: SentenceMap['letter'][]): TruthTable => new TruthTable({ real: [], sentence: letters })
 
 describe('TruthTable', () => {
@@ -406,6 +406,40 @@ describe('*_to_smtlib', () => {
     const expr = divide(a, divide(b, divide(c, divide(d, e))))
     const expected = ['/', 'a', ['/', 'b', ['/', 'c', ['/', 'd', 'e']]]]
     expect(real_expr_to_smtlib(expr)).toEqual(expected)
+  })
+  test('^ expands nonnegative integer exponents', () => {
+    expect(real_expr_to_smtlib({ tag: 'power', base: a, exponent: lit({ value: 3 }) })).toEqual(['*', 'a', 'a', 'a'])
+    expect(real_expr_to_smtlib({ tag: 'power', base: a, exponent: lit({ value: 0 }) })).toEqual('1')
+  })
+  test('^ expands negative integer exponents', () => {
+    expect(real_expr_to_smtlib({ tag: 'power', base: a, exponent: { tag: 'negative', expr: lit({ value: 2 }) } })).toEqual(['/', '1', ['*', 'a', 'a']])
+  })
+  test('constraint conditionals stay binary', () => {
+    const [p, q, r] = [eq(a, b), eq(c, d), eq(e, f)]
+    expect(constraint_to_smtlib(cimp(p, cimp(q, r)))).toEqual(['=>', ['=', 'a', 'b'], ['=>', ['=', 'c', 'd'], ['=', 'e', 'f']]])
+  })
+  test('conditional-probability definedness is guarded under disjunction', () => {
+    const [A, B] = [letter({ id: 'A', index: 0 }), letter({ id: 'B', index: 0 })]
+    const tt = make_tt([A, B])
+    const constraint = cor(eq(cpr({ arg: A, given: B }), lit({ value: 1 })), eq(pr({ arg: A }), lit({ value: 0 })))
+    const [guarded] = enrich_constraints(tt, tt.n_states() - 1, false, translate(tt, [constraint])).slice(-1)
+    expect(constraint_to_smtlib(guarded)).toEqual([
+      'or',
+      [
+        'and',
+        ['not', ['=', ['+', 'a_1', 'a_3'], '0']],
+        ['=', ['/', 'a_1', ['+', 'a_1', 'a_3']], '1'],
+      ],
+      ['=', ['+', 'a_1', 'a_2'], '0'],
+    ])
+  })
+  test('free real variables are collected and declared', () => {
+    const constraint = eq(pr({ arg: letter({ id: 'A', index: 0 }) }), vbl({ id: 'x' }))
+    const variables = variables_in_constraints([constraint])
+    expect(variables.real).toEqual(['x'])
+    const tt = new TruthTable(variables)
+    const declarations = constraints_to_smtlib_lines(tt, tt.n_states() - 1, translate(tt, [constraint]))
+    expect(declarations).toContainEqual(['declare-const', 'x', 'Real'])
   })
 })
 

@@ -127,6 +127,24 @@ test('trivalent toggle runs through the visible selector', async ({ page }) => {
   await expect(badge).toContainText('→₃')
 })
 
+test('arithmetic-only constraints do not show a probability table', async ({ page }) => {
+  await to_load(page)
+  const test_ids = TestId.generic_multi_input('constraints')
+  const single_input = page.getByTestId(test_ids.split.single.get(0))
+
+  await single_input.getByTestId(test_ids.split.input).fill('1 / (2 / 4) = 2')
+  await find_model(page, 'sat', DEFAULT_TIMEOUT)
+  await expect(page.getByTestId(TestId.model_table)).toHaveCount(0)
+  await expect(page.getByTestId(TestId.state_row.state(0))).toHaveCount(0)
+  await expect(page.getByText('Evaluate model')).toHaveCount(0)
+
+  await single_input.getByTestId(test_ids.split.input).fill('1 / (2 / 4) != 2')
+  await find_model(page, 'unsat', DEFAULT_TIMEOUT)
+  await expect(page.getByTestId(TestId.model_table)).toHaveCount(0)
+  await expect(page.getByTestId(TestId.state_row.state(0))).toHaveCount(0)
+  await expect(page.getByText('Evaluate model')).toHaveCount(0)
+});
+
 test('adding a bunch of constraints', async ({ page }) => {
   await to_load(page)
   const test_ids = TestId.generic_multi_input('constraints')

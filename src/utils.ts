@@ -203,12 +203,20 @@ export const readonly = <T extends {}>(t: T): Readonly<T> => {
 // Returns true if cancelled, false otherwise.
 export const sleep = async (timeout_ms: number, abort_signal?: AbortSignal): Promise<boolean> => {
     return new Promise((resolve) => {
+        let settled = false
         const timeout = setTimeout(() => {
+            settled = true
+            abort_signal?.removeEventListener('abort', on_cancel)
             resolve(false)
         }, timeout_ms)
 
         const on_cancel = () => {
+            if (settled) {
+                return
+            }
+            settled = true
             clearTimeout(timeout)
+            abort_signal?.removeEventListener('abort', on_cancel)
             resolve(true)
         }
         abort_signal?.addEventListener('abort', on_cancel)

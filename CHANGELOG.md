@@ -9,13 +9,14 @@
 Added an experimental Pr3SAT mode for Cooper-style trivalent probability:
 
 - New semantic core in `src/cooper.ts`, with the three-valued truth table over every sentence letter and probability of `A` computed as true mass over true-plus-false mass.
-- Z3/SMT wrapper in `src/pr3_sat.ts`; the visible UI keeps the existing solver selector and adds a `Trivalent` checkbox so the same language can be read classically or trivalently.
+- Z3/SMT wrapper in `src/pr3_sat.ts`; the visible UI keeps the existing solver selector and adds a `Trivalent (ERS)` checkbox so the same language can be read classically or trivalently.
 - The object-language conditional remains the single token `->`. In classical mode it has the material semantics; in trivalent mode it has the Cooper conditional semantics. Conditional probability `Pr(B | A)` is translated as `Pr(A -> B)` under the selected semantics.
-- Model evaluation uses the selected semantics too, so the evaluator pane reports trivalent values when `Trivalent` is checked.
+- Model evaluation uses the selected semantics too, so the evaluator pane reports trivalent values when `Trivalent (ERS)` is checked.
 - Random Search is wired through the same semantics flag and imports the pure Cooper translator rather than the Z3-facing Pr3SAT wrapper, keeping the worker bundle independent of Z3.
 - Result rendering marks trivalent SMT results as `Pr3SAT: ->_3 / Z3` and trivalent random-search results as `Trivalent Random Search`.
+- Fixed trivalent Random Search + Maple branch verification for zero-denominator case expressions: state-index substitution now descends into internal `ite` real expressions, with a regression covering `Pr(P -> Q) = 1/4`, `Pr(Q)=1/6`, `Pr(Q -> P) = 1`, and `Pr(P)=2/3`.
 
-Verification: `npm run build`; `npx vitest --run` (687 passing, 1 skipped); focused `npx vitest --run src/random_search.spec.ts src/pr3_sat.spec.ts` (36 passing).
+Verification: `npm run build`; `npx vitest --run` (700 passing, 1 skipped); focused `npx vitest --run src/random_search.spec.ts src/pr3_sat.spec.ts` (36 passing).
 
 ### Decision: keep Maple as the equation solver for Random Search
 
@@ -159,6 +160,41 @@ Ports the random-search branch of the Mathematica reference PrSAT (`../PrSAT 3.0
 `solver_method.watch(...).call()` invoked `invalidate()` before `invalidate` was defined in the closure, throwing a `ReferenceError` during module init and leaving the body blank. Removed the eager `.call()` and set the initial `display: none` inline on the random-options row instead.
 
 ## Pre-existing 3.0 history (forked from)
+
+## 2026-06-12
+
+### Added: Decimals toggle in Evaluate model
+
+New "Decimals" button to the right of Clear in the Evaluate model toolbar (ported from the 3.1 experimental fork). Toggles all evaluation results between exact values and 4-decimal-place approximations (e.g. 111/88 vs 1.2614); the button relabels to "Fractions" while decimals are shown. Quadratic-root values show their decimal approximation; higher-degree roots keep their exact display. Implemented via a `show_decimals` editable in `model_evaluators` (`src/text_to_display.ts`) and a new optional `extra_toolbar_buttons` parameter on `generic_input_block` (`src/block_playground.ts`). Verification: `npm run build` passes; `npx vitest --run` passes (585 tests, 1 skipped). Committed (3ff62b6), pushed, and deployed to fitelson.org on 2026-06-12.
+
+## 2026-06-10
+
+### Fixed: Soundness and Runtime Bugs from June 2026 Review
+
+- Fixed SMT-LIB emission for nested constraint-level conditionals so `=>` stays binary instead of being flattened into an invalid n-ary/right-association shape.
+- Fixed nested subtraction and division emission so right operands are preserved instead of being flattened into left-associative n-ary arithmetic.
+- Reworked exponentiation support: integer literal powers are expanded to multiplication/division before reaching Z3, while unsupported non-integer exponents fail with a clear error.
+- Fixed parser backtracking for chained sentence/constraint connectives by replacing repeated alternatives with right-associative chain parsing.
+- Preserved exact numeric literal source text for large/precise literals so SMT-LIB output no longer silently rounds values or emits JS scientific notation.
+- Scoped conditional-probability denominator guards to their logical context instead of globally hoisting `Pr(Y) != 0` assertions under disjunction/conditional/biconditional contexts.
+- Declared and evaluated free real variables in solver/evaluator paths, and skipped non-state real declarations during probability-table model extraction.
+- Added Z3 native timeout support to the live wrapped solver path.
+
+### Fixed: UI, Input, Display, and Data-Structure Bugs
+
+- Fixed timeout clearing, stale exception/status display, repeated cancel clicks, disabled solve options during active solves, empty-constraint Find Model enablement, save-table-image padding restoration, and global unhandled-rejection messages.
+- Fixed batch/file input synchronization, repeated load of the same file, clipboard error handling, stale async display output after edits/removals, focused-row removal, and redundant focus churn.
+- Hid the degenerate one-state `a_i` table, model evaluator pane, and save-table-as-image control for arithmetic-only constraints with no sentence letters.
+- Fixed rational model stringification, root polynomial exponent/trailing-zero handling, displayed polynomial signs, exact S-expression matching, abortable sleep cleanup, `EditableDLL.watch_remove`, duplicate-data `DLL.insert_before`, and bounded random floats.
+
+### Changed: Build, Deploy, and Documentation
+
+- `npm run build` now refreshes bundled Z3 WASM/JS assets before TypeScript/Vite build.
+- `npm run deploy` now uploads `dist/.` so dotfiles such as `.htaccess` are included.
+- Production `.htaccess` now caches JS/CSS/WASM assets aggressively while keeping HTML fresh.
+- Updated README clone URL, in-app help text, project webpage syntax/results text, and removed the stale Vite favicon link.
+- Added regression tests for the critical SMT-LIB soundness failures, parser/numeric-literal fixes, model parsing/display helpers, S-expression matching, and input focus behavior.
+- Verification: `npm run build` passes; `npx vitest --run` passes with 585 tests passing and 1 skipped.
 
 ## 2026-04-18 (later)
 

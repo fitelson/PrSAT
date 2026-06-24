@@ -726,6 +726,8 @@ export const substitute_constraint_indices = (
       return divide(sub_expr(e.numerator), sub_expr(e.denominator))
     } else if (e.tag === 'power') {
       return { tag: 'power', base: sub_expr(e.base), exponent: sub_expr(e.exponent) }
+    } else if (e.tag === 'ite') {
+      return { tag: 'ite', condition: sub_c(e.condition), then_expr: sub_expr(e.then_expr), else_expr: sub_expr(e.else_expr) }
     } else {
       return e
     }
@@ -795,6 +797,8 @@ export const substitute_constraint = (
       return divide(sub_expr(e.numerator), sub_expr(e.denominator))
     } else if (e.tag === 'power') {
       return { tag: 'power', base: sub_expr(e.base), exponent: sub_expr(e.exponent) }
+    } else if (e.tag === 'ite') {
+      return { tag: 'ite', condition: sub_c(e.condition), then_expr: sub_expr(e.then_expr), else_expr: sub_expr(e.else_expr) }
     } else {
       return e  // probability / given_probability: untranslated, shouldn't appear
     }

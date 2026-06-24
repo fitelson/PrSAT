@@ -365,33 +365,33 @@
                     <td><code>Pr(H | E) > Pr(H)</code></td>
                 </tr>
                 <tr>
-                    <td><code>X & Y</code></td>
+                    <td><code>X & Y</code> or <code>X /\ Y</code></td>
                     <td>Conjunction (and)</td>
                     <td><code>Pr(A & B) = 0</code></td>
                 </tr>
                 <tr>
-                    <td><code>X \/ Y</code> or <code>X v Y</code></td>
+                    <td><code>X \/ Y</code>, <code>X ∨ Y</code>, or <code>X v Y</code></td>
                     <td>Disjunction (or)</td>
                     <td><code>Pr(A \/ B) = 1</code> or <code>Pr(A v B) = 1</code></td>
                 </tr>
                 <tr>
-                    <td><code>~X</code> or <code>-X</code></td>
+                    <td><code>~X</code>, <code>!X</code>, or <code>-X</code></td>
                     <td>Negation (not)</td>
                     <td><code>Pr(~E) = Pr(E)</code></td>
                 </tr>
                 <tr>
-                    <td><code>X -&gt; Y</code></td>
+                    <td><code>X -&gt; Y</code>, <code>X → Y</code>, or <code>X &gt; Y</code></td>
                     <td>Conditional (if-then)</td>
                     <td><code>Pr(P -&gt; Q) &gt;= Pr(Q | P)</code></td>
                 </tr>
             </table>
             
             <p>
-                <strong>Comparison operators:</strong> <code>=</code>, <code>!=</code>, <code>&lt;</code>,
-                <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code>
+                <strong>Comparison operators:</strong> <code>=</code>, <code>!=</code>, <code>≠</code>, <code>&lt;</code>,
+                <code>&gt;</code>, <code>&lt;=</code>, <code>≤</code>, <code>&gt;=</code>, <code>≥</code>
             </p>
             <p>
-                <strong>Arithmetic operators:</strong> <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>
+                <strong>Arithmetic operators:</strong> <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>^</code>
             </p>
 
             <h3>Logical Combinations of Probabilistic Constraints</h3>
@@ -430,14 +430,14 @@
             <h3>Options</h3>
             <ul>
                 <li><strong>Regular:</strong> Check this to search for a regular (i.e., strictly positive) probability model</li>
-                <li><strong>Timeout:</strong> Set a maximum time limit for the solver (hours, minutes, seconds)</li>
+                <li><strong>Timeout:</strong> Set a maximum time limit for the solver in seconds</li>
             </ul>
         </section>
         
         <section id="results">
             <h2>Understanding Results</h2>
             
-            <p>After clicking <strong>Find Model</strong>, PrSAT returns one of two possible results:</p>
+            <p>After clicking <strong>Find Model</strong>, PrSAT reports whether the constraints are satisfiable, unsatisfiable, unknown, cancelled, or ended with an exception.</p>
             
             <h3>Unsatisfiable</h3>
             <p>

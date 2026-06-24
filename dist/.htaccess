@@ -14,9 +14,15 @@ AddType application/wasm .wasm
     </Files>
 </IfModule>
 
-# Disable caching during testing
-<FilesMatch "\.(js|css|wasm|html)$">
+# Cache hashed build assets aggressively; keep HTML fresh so deployments are picked up.
+<FilesMatch "\.(js|css|wasm)$">
     <IfModule mod_headers.c>
-        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </IfModule>
+</FilesMatch>
+
+<FilesMatch "\.(html)$">
+    <IfModule mod_headers.c>
+        Header set Cache-Control "no-cache"
     </IfModule>
 </FilesMatch>
