@@ -14,10 +14,6 @@ import { s_to_string } from './s'
 import { ConstraintOrRealExpr, PrSat } from './types'
 import { fallthrough } from './utils'
 import {
-  translate_constraint_or_real_expr_cooper,
-  translate_constraints_cooper,
-} from './cooper'
-import {
   constraint_to_bool,
   expr_to_assignment,
   FancyEvaluatorOutput,
@@ -26,23 +22,39 @@ import {
   WrappedSolver,
 } from './z3_integration'
 import { Context, Model } from 'z3-solver'
+import {
+  CCKTruthTable,
+  compute_cck_value_sets,
+  cck_probability_denominator,
+  div0_conditions_in_cck_probability,
+  evaluate_cck_sentence,
+  table_truth_value,
+  translate_cck_probability,
+  translate_constraint_cck,
+  translate_constraint_or_real_expr_cck,
+  translate_constraints_cck,
+  translate_real_expr_cck,
+} from './cck'
 
 export {
-  compute_cooper_value_sets,
-  cooper_probability_denominator,
-  div0_conditions_in_cooper_probability,
-  evaluate_cooper_sentence,
-  translate_constraint_cooper,
-  translate_constraint_or_real_expr_cooper,
-  translate_constraints_cooper,
-  translate_cooper_probability,
-  translate_real_expr_cooper,
-} from './cooper'
-export type { CooperValueSets, TruthValue3 } from './cooper'
+  CCKTruthTable,
+  compute_cck_value_sets,
+  cck_probability_denominator,
+  div0_conditions_in_cck_probability,
+  evaluate_cck_sentence,
+  table_truth_value,
+  translate_cck_probability,
+  translate_constraint_cck,
+  translate_constraint_or_real_expr_cck,
+  translate_constraints_cck,
+  translate_real_expr_cck,
+}
+
+export type { CCKTruthValue, CCKValueSets } from './cck'
 
 type Constraint = PrSat['Constraint']
 
-export const fancy_evaluate_constraint_or_real_expr_cooper = async <CtxKey extends string>(
+export const fancy_evaluate_constraint_or_real_expr_cck = async <CtxKey extends string>(
   ctx: Context<CtxKey>,
   model: Model<CtxKey>,
   tt: TruthTable,
@@ -55,7 +67,7 @@ export const fancy_evaluate_constraint_or_real_expr_cooper = async <CtxKey exten
     return { tag: 'undeclared-vars', variables: { sentence: [...free_sentence_vars], real: [...free_real_vars] } }
   }
 
-  const translated_c_or_re = translate_constraint_or_real_expr_cooper(tt, c_or_re)
+  const translated_c_or_re = translate_constraint_or_real_expr_cck(tt, c_or_re)
   const index_to_eliminate = tt.n_states() - 1
 
   for (const div0_constraint of div0_conditions_in_constraint_or_real_expr(translated_c_or_re)) {
@@ -84,11 +96,11 @@ export const fancy_evaluate_constraint_or_real_expr_cooper = async <CtxKey exten
     const output = await expr_to_assignment(ctx, model, z3_expr)
     return { tag: 'result', result: output }
   } else {
-    return fallthrough('fancy_evaluate_constraint_or_real_expr_cooper', eliminated)
+    return fallthrough('fancy_evaluate_constraint_or_real_expr_cck', eliminated)
   }
 }
 
-type Pr3SolverOptions = {
+type CCKSolverOptions = {
   regular: boolean
   timeout_ms: number
   abort_signal?: AbortSignal
@@ -96,23 +108,23 @@ type Pr3SolverOptions = {
   onTranslated?: (translated: Constraint[]) => void
 }
 
-const DEFAULT_PR3_SOLVER_OPTIONS: Pr3SolverOptions = {
+const DEFAULT_CCK_SOLVER_OPTIONS: CCKSolverOptions = {
   regular: false,
   timeout_ms: 30_000,
   abort_signal: undefined,
 }
 
-export type Pr3SATResult = PrSATResult & { method: 'pr3', semantics: 'trivalent-ers' }
+export type CCKSATResult = PrSATResult & { method: 'pr3', semantics: 'trivalent-cck' }
 
-export const pr3_sat_wrapped = async (
+export const cck_sat_wrapped = async (
   solver: WrappedSolver,
   tt: TruthTable,
   constraints: Constraint[],
-  options?: Partial<Pr3SolverOptions>,
-): Promise<Pr3SATResult> => {
-  const { regular, timeout_ms, abort_signal, cancel_fallback, onTranslated } = { ...DEFAULT_PR3_SOLVER_OPTIONS, ...(options ?? {}) }
+  options?: Partial<CCKSolverOptions>,
+): Promise<CCKSATResult> => {
+  const { regular, timeout_ms, abort_signal, cancel_fallback, onTranslated } = { ...DEFAULT_CCK_SOLVER_OPTIONS, ...(options ?? {}) }
 
-  const translated = translate_constraints_cooper(tt, constraints)
+  const translated = translate_constraints_cck(tt, constraints)
   onTranslated?.(translated)
   const index_to_eliminate = tt.n_states() - 1
   const enriched_constraints = enrich_constraints(tt, index_to_eliminate, regular, translated)
@@ -124,7 +136,7 @@ export const pr3_sat_wrapped = async (
     smtlib_string,
     timeout_ms,
     (ctx, model) => async (evt_tt: TruthTable, c_or_re: ConstraintOrRealExpr): Promise<FancyEvaluatorOutput> =>
-      await fancy_evaluate_constraint_or_real_expr_cooper(ctx, model, evt_tt, c_or_re),
+      await fancy_evaluate_constraint_or_real_expr_cck(ctx, model, evt_tt, c_or_re),
     abort_signal,
     cancel_fallback,
   )
@@ -144,7 +156,7 @@ export const pr3_sat_wrapped = async (
 
     return {
       method: 'pr3',
-      semantics: 'trivalent-ers',
+      semantics: 'trivalent-cck',
       constraints: output_constraints,
       smtlib_input: smtlib_string + `\n(define-fun ${`s_${index_to_eliminate}`} () Real ${s_to_string(real_expr_to_smtlib(redef), false)})\n(check-sat)\n(get-model)`,
       solver_output: {
@@ -156,7 +168,7 @@ export const pr3_sat_wrapped = async (
 
   return {
     method: 'pr3',
-    semantics: 'trivalent-ers',
+    semantics: 'trivalent-cck',
     constraints: output_constraints,
     smtlib_input: smtlib_string + `\n(check-sat)`,
     solver_output: result,

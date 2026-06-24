@@ -65,6 +65,10 @@ import {
   translate_constraints_cooper,
   translate_constraint_or_real_expr_cooper,
 } from './cooper'
+import {
+  translate_constraints_cck,
+  translate_constraint_or_real_expr_cck,
+} from './cck'
 
 type Constraint = PrSat['Constraint']
 type RealExpr = PrSat['RealExpr']
@@ -72,7 +76,7 @@ type RealExpr = PrSat['RealExpr']
 export const DEFAULT_REG_MARGIN = 1e-3
 export const DEFAULT_SEARCH_ATTEMPTS = 3
 export const DEFAULT_MAX_RATIONALIZE_ATTEMPTS = 40
-export type ProbabilitySemantics = 'classical' | 'trivalent'
+export type ProbabilitySemantics = 'classical' | 'trivalent-ers' | 'trivalent-cck'
 
 // Numeric acceptance threshold. Non-strict inequalities sitting exactly on
 // their boundary (e.g. a state pinned to 0 by a certainty constraint) have
@@ -145,9 +149,11 @@ export type RandomPrSATResult = {
 
 const describe_run = (opts: RandomSearchOptions, seed: string, attempts_used: number, status: string, fmin?: number): string => {
   const lines = [
-    opts.semantics === 'trivalent'
-      ? `; Trivalent Random Search run`
-      : `; PrSAT Random Search run`,
+    opts.semantics === 'trivalent-ers'
+      ? `; Trivalent (ERS) Random Search run`
+      : opts.semantics === 'trivalent-cck'
+        ? `; Trivalent (CCK) Random Search run`
+        : `; PrSAT Random Search run`,
     `; semantics = ${opts.semantics}`,
     `; seed = ${seed}`,
     `; search_attempts = ${opts.search_attempts}`,
@@ -298,6 +304,44 @@ export const build_rational_cooper_evaluator = (
   if (result.tag !== 'ok') return { tag: 'div0' }
   return { tag: 'result', result: rational_to_model_assignment(result.value) }
 }
+
+export const build_rational_cck_evaluator = (
+  rational_assignments: Record<number, Rational>,
+) => async (evt_tt: TruthTable, c_or_re: ConstraintOrRealExpr): Promise<FancyEvaluatorOutput> => {
+  const declared_letters = new LetterSet([...evt_tt.letters()])
+  const free_sent = free_variables_in_constraint_or_real_expr(c_or_re, new LetterSet(), declared_letters)
+  const free_real = free_real_variables_in_constraint_or_real_expr(c_or_re, new Set())
+  if (!free_sent.is_empty() || free_real.size > 0) {
+    return { tag: 'undeclared-vars', variables: { sentence: [...free_sent], real: [...free_real] } }
+  }
+
+  const translated_c_or_re = translate_constraint_or_real_expr_cck(evt_tt, c_or_re)
+  const div0s = div0_conditions_in_constraint_or_real_expr(translated_c_or_re)
+  for (const c of div0s) {
+    const result = evaluate_constraint_rational(c, rational_assignments)
+    if (result.tag !== 'ok') return { tag: 'div0' }
+    if (result.value === false) return { tag: 'div0' }
+  }
+
+  if (translated_c_or_re.tag === 'constraint') {
+    const result = evaluate_constraint_rational(translated_c_or_re.constraint, rational_assignments)
+    if (result.tag !== 'ok') return { tag: 'div0' }
+    return { tag: 'bool-result', result: result.value }
+  }
+  const result = evaluate_real_expr_rational(translated_c_or_re.real_expr, rational_assignments)
+  if (result.tag !== 'ok') return { tag: 'div0' }
+  return { tag: 'result', result: rational_to_model_assignment(result.value) }
+}
+
+const build_rational_semantic_evaluator = (
+  semantics: ProbabilitySemantics,
+  assignments: Record<number, Rational>,
+) =>
+  semantics === 'trivalent-ers'
+    ? build_rational_cooper_evaluator(assignments)
+    : semantics === 'trivalent-cck'
+      ? build_rational_cck_evaluator(assignments)
+      : build_rational_evaluator(assignments)
 
 // ---------- Maple-bridge branch search ----------
 
@@ -457,9 +501,11 @@ export const random_pr_sat_wrapped = async (
   }
 
   const random = new Random(opts.seed)
-  const translated = opts.semantics === 'trivalent'
+  const translated = opts.semantics === 'trivalent-ers'
     ? translate_constraints_cooper(tt, constraints)
-    : translate(tt, constraints)
+    : opts.semantics === 'trivalent-cck'
+      ? translate_constraints_cck(tt, constraints)
+      : translate(tt, constraints)
   opts.onTranslated?.(translated)
 
   const n_states = tt.n_states()
@@ -520,9 +566,7 @@ export const random_pr_sat_wrapped = async (
             const result = make_result(found.attempts, {
               status: 'sat',
               state_assignments,
-              evaluate: opts.semantics === 'trivalent'
-                ? build_rational_cooper_evaluator(found.assignments)
-                : build_rational_evaluator(found.assignments),
+              evaluate: build_rational_semantic_evaluator(opts.semantics, found.assignments),
             }, found.fmin)
             result.used_maple_bridge = true
             result.rational_model = found.assignments
@@ -539,9 +583,7 @@ export const random_pr_sat_wrapped = async (
     const result = make_result(attempt, {
       status: 'sat',
       state_assignments,
-      evaluate: opts.semantics === 'trivalent'
-        ? build_rational_cooper_evaluator(assignments)
-        : build_rational_evaluator(assignments),
+      evaluate: build_rational_semantic_evaluator(opts.semantics, assignments),
     }, fmin)
     result.rational_model = assignments
     return result

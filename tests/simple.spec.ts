@@ -124,7 +124,7 @@ test('trivalent toggle runs through the visible selector', async ({ page }) => {
   const badge = page.getByTestId(TestId.solver_method.badge)
   await expect(badge).toBeVisible()
   await expect(badge).toContainText('Pr3SAT')
-  await expect(badge).toContainText('→₃')
+  await expect(badge).toContainText('ERS')
 })
 
 test('arithmetic-only constraints do not show a probability table', async ({ page }) => {

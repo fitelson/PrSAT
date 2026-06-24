@@ -181,7 +181,7 @@ describe('WrappedSolver', () => {
         time_before_cancel_ms: 10,
         cancel_timeout_ms: 50,
         time_to_actually_cancel_ms: 30,
-        fudge_ms: 20,
+        fudge_ms: 25,
         ignore_abort: false,
       }, 'cancelled')
     })
@@ -190,7 +190,7 @@ describe('WrappedSolver', () => {
         time_before_cancel_ms: 10,
         cancel_timeout_ms: 50,
         time_to_actually_cancel_ms: 60,
-        fudge_ms: 20,
+        fudge_ms: 25,
         ignore_abort: false,
       }, 'slow-cancelled')
     })

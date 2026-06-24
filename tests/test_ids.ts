@@ -95,6 +95,7 @@ export const timeout = readonly({
 export const solver_method = readonly({
   select: 'solver-method-select',
   trivalent_toggle: 'trivalent-toggle',
+  trivalent_cck_toggle: 'trivalent-cck-toggle',
   seed_input: 'random-seed-input',
   attempts_input: 'random-attempts-input',
   badge: 'solver-method-badge',

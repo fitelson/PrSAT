@@ -5,7 +5,9 @@ import { parse_constraint, parse_constraint_or_real_expr } from "./parser";
 import { constraint_to_string, letter_string, TruthTable, variables_in_constraints } from "./pr_sat";
 import { pr3_sat_wrapped, Pr3SATResult } from "./pr3_sat";
 import { FancyEvaluatorOutput, init_z3, ModelAssignmentOutput, pr_sat_wrapped, PrSATResult, WrappedSolver, WrappedSolverResult } from "./z3_integration";
-import { build_rational_cooper_evaluator, build_rational_evaluator, ProbabilitySemantics, RandomPrSATResult, DEFAULT_SEARCH_ATTEMPTS, RandomSearchOptions } from "./random_search";
+import { build_rational_cck_evaluator, build_rational_cooper_evaluator, build_rational_evaluator, ProbabilitySemantics, RandomPrSATResult, DEFAULT_SEARCH_ATTEMPTS, RandomSearchOptions } from "./random_search";
+import { CCKTruthTable, table_truth_value } from "./cck";
+import { cck_sat_wrapped, CCKSATResult } from "./cck_sat";
 import { ping_maple_bridge, DEFAULT_MAPLE_BRIDGE_URL } from "./maple_bridge_client";
 import { s_to_string } from "./s";
 import { ConstraintOrRealExpr, PrSat } from "./types";
@@ -24,7 +26,7 @@ const root = assert_exists(document.getElementById('app'), 'Root element with id
 
 type Constraint = PrSat['Constraint']
 type SolverMethod = 'z3' | 'random'
-type SolverResult = PrSATResult | Pr3SATResult | RandomPrSATResult
+type SolverResult = PrSATResult | Pr3SATResult | CCKSATResult | RandomPrSATResult
 // type RealExpr = PrSat['RealExpr']
 // type Sentence = PrSat['Sentence']
 
@@ -815,8 +817,8 @@ const truth_table_display = (tt: TruthTable): HTMLElement => {
     const row = el('tr', {})
     letters.forEach((l, idx) => {
       const isLast = idx === letters.length - 1
-      const letter_value = tt.letter_value_from_index(l, state_index)
-      const value_string = letter_value ? '⊤' : '⊥'
+      const letter_value = table_truth_value(tt, l, state_index)
+      const value_string = letter_value === 1 ? '⊤' : letter_value === 0 ? '⊥' : 'N'
       row.appendChild(el('td', isLast ? { class: 'dv' } : {}, value_string))
     })
     row.appendChild(tel(TestId.state_row.state(state_index), 'td', {}, state_id(state_index)))
@@ -851,8 +853,8 @@ const model_display = (tt: TruthTable, model_assignments: Record<number, ModelAs
     const row = el('tr', {})
     letters.forEach((l, idx) => {
       const isLast = idx === letters.length - 1
-      const letter_value = tt.letter_value_from_index(l, state_index)  // Scary parseInt!
-      const value_string = letter_value ? '⊤' : '⊥'
+      const letter_value = table_truth_value(tt, l, state_index)
+      const value_string = letter_value === 1 ? '⊤' : letter_value === 0 ? '⊥' : 'N'
       row.appendChild(el('td', isLast ? { class: 'dv' } : {}, value_string))
     })
     row.appendChild(tel(TestId.state_row.state(state_index), 'td', { class: 'dv' }, state_id(state_index)))
@@ -1269,8 +1271,20 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
     type: 'checkbox',
     style: 'margin-left: 0.4em;',
   }) as HTMLInputElement
+  const trivalent_cck_toggle = tel(TestId.solver_method.trivalent_cck_toggle, 'input', {
+    type: 'checkbox',
+    style: 'margin-left: 0.4em;',
+  }) as HTMLInputElement
+  const set_probability_semantics = (semantics: ProbabilitySemantics) => {
+    trivalent_toggle.checked = semantics === 'trivalent-ers'
+    trivalent_cck_toggle.checked = semantics === 'trivalent-cck'
+    probability_semantics.set(semantics)
+  }
   trivalent_toggle.addEventListener('change', () => {
-    probability_semantics.set(trivalent_toggle.checked ? 'trivalent' : 'classical')
+    set_probability_semantics(trivalent_toggle.checked ? 'trivalent-ers' : 'classical')
+  })
+  trivalent_cck_toggle.addEventListener('change', () => {
+    set_probability_semantics(trivalent_cck_toggle.checked ? 'trivalent-cck' : 'classical')
   })
 
   // Random-search-only inputs. Visible only when solver_method === 'random'.
@@ -1314,6 +1328,8 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
     invalidate()
   })
   probability_semantics.watch(() => {
+    trivalent_toggle.checked = probability_semantics.get() === 'trivalent-ers'
+    trivalent_cck_toggle.checked = probability_semantics.get() === 'trivalent-cck'
     invalidate()
   })
 
@@ -1328,6 +1344,10 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
         el('label', {},
           'Trivalent (ERS):',
           trivalent_toggle,
+        ),
+        el('label', {},
+          'Trivalent (CCK):',
+          trivalent_cck_toggle,
         ),
         el('label', {},
           'Regular:',
@@ -1538,7 +1558,10 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
   }
 
   const start_search_solver = async (solver: WrappedSolver, constraints: Constraint[], is_regular: boolean): Promise<void> => {
-    const truth_table = new TruthTable(variables_in_constraints(constraints))
+    const semantic_mode = probability_semantics.get()
+    const truth_table = semantic_mode === 'trivalent-cck'
+      ? new CCKTruthTable(variables_in_constraints(constraints))
+      : new TruthTable(variables_in_constraints(constraints))
     // state.set({ tag: 'looking', truth_table })
     const abort_controller = new AbortController()
     state2.set({ tag: 'looking', truth_table, abort_controller })
@@ -1558,7 +1581,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
         const worker = new Worker(new URL('./random_search_worker.ts', import.meta.url), { type: 'module' })
         const options: Partial<Omit<RandomSearchOptions, 'abort_signal' | 'onTranslated'>> = {
           regular: is_regular,
-          semantics: probability_semantics.get(),
+          semantics: semantic_mode,
           seed: random_seed.get() === '' ? undefined : random_seed.get(),
           search_attempts: random_attempts.get(),
           maple_bridge_url: maple_bridge_available.get() ? DEFAULT_MAPLE_BRIDGE_URL : undefined,
@@ -1567,7 +1590,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
           constraints: { original: constraints, translated: [], extra: [], eliminated: [] },
           smtlib_input: '; cancelled',
           method: 'random',
-          semantics: probability_semantics.get(),
+          semantics: semantic_mode,
           seed: random_seed.get(),
           attempts_used: 0,
           solver_output: { status: 'cancelled' },
@@ -1587,9 +1610,11 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
             const result: RandomPrSATResult = msg.result
             // Rebuild the non-cloneable evaluator from the exact rational model.
             if (result.solver_output.status === 'sat' && result.rational_model !== undefined) {
-              result.solver_output.evaluate = result.semantics === 'trivalent'
+              result.solver_output.evaluate = result.semantics === 'trivalent-ers'
                 ? build_rational_cooper_evaluator(result.rational_model)
-                : build_rational_evaluator(result.rational_model)
+                : result.semantics === 'trivalent-cck'
+                  ? build_rational_cck_evaluator(result.rational_model)
+                  : build_rational_evaluator(result.rational_model)
             }
             resolve(result)
           } else if (msg.tag === 'error') {
@@ -1601,11 +1626,19 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
         worker.postMessage({ constraints, variables: truth_table.variables, options })
       })
       const method = solver_method.get()
-      const semantics = probability_semantics.get()
+      const semantics = semantic_mode
       const result: SolverResult = method === 'random'
         ? await run_random_search_in_worker()
-        : semantics === 'trivalent'
+        : semantics === 'trivalent-ers'
           ? await pr3_sat_wrapped(solver, truth_table, constraints, {
+              regular: is_regular,
+              timeout_ms: timeout_ms.get(),
+              abort_signal: abort_controller.signal,
+              cancel_fallback,
+              onTranslated: on_translated,
+            })
+          : semantics === 'trivalent-cck'
+            ? await cck_sat_wrapped(solver, truth_table, constraints, {
               regular: is_regular,
               timeout_ms: timeout_ms.get(),
               abort_signal: abort_controller.signal,
@@ -1748,10 +1781,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
         } else {
           model_assignments2.set(undefined)
         }
-      // } else if (state.solver_output.solver_output.) {
-        // evaluators.multi_input.refresh()
-        // evaluators.refresh()
-      } else if (state.solver_output.solver_output.status === 'unsat') {
+      } else {
         model_assignments2.set(undefined)
       }
     } else if (last_state?.tag !== 'looking' && state.tag === 'looking') {
@@ -1806,7 +1836,11 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
 
       // Random-search badge: method / seed / attempts_used.
       if ('method' in so && so.method === 'random') {
-        const random_method = so.semantics === 'trivalent' ? 'Trivalent Random Search' : 'Random Search'
+        const random_method = so.semantics === 'trivalent-ers'
+          ? 'Trivalent (ERS) Random Search'
+          : so.semantics === 'trivalent-cck'
+            ? 'Trivalent (CCK) Random Search'
+            : 'Random Search'
         const badge_parts: string[] = [so.used_maple_bridge ? `via ${random_method} + Maple bridge` : `via ${random_method}`]
         badge_parts.push(`seed: ${so.seed}`)
         badge_parts.push(`attempt ${so.attempts_used}/${so.attempts_used > 0 ? so.attempts_used : 1}`)
@@ -1821,7 +1855,9 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
         state_display.append(' ')
         state_display.appendChild(tel(TestId.solver_method.badge, 'span', {
           style: 'font-size: 0.85em; color: #555; margin-left: 0.6em;',
-        }, '(via Pr3SAT: →₃ / Z3)'))
+        }, so.semantics === 'trivalent-cck'
+          ? '(via Pr3SAT: CCK / Z3)'
+          : '(via Pr3SAT: ERS / Z3)'))
       }
 
       if (so.solver_output.status === 'sat') {
@@ -1832,7 +1868,8 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
           model_container.appendChild(model_html)
           right_side.appendChild(evaluators.element)
         }
-      } else if (so.solver_output.status === 'unsat') {
+      } else {
+        model_container.innerHTML = ''
         right_side.innerHTML = ''
       }
     } else if (state.tag === 'invalidated') {

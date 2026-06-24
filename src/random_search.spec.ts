@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import {
   random_pr_sat,
   random_pr_sat_wrapped,
+  build_rational_cck_evaluator,
   build_rational_cooper_evaluator,
   sample_dirichlet_ones,
   rational_to_model_assignment,
@@ -17,6 +18,7 @@ import {
 import { Random } from './random'
 import { r_from_fraction, ONE, ZERO } from './rationalize'
 import { PrSat } from './types'
+import { CCKTruthTable } from './cck'
 
 type Constraint = PrSat['Constraint']
 
@@ -230,12 +232,12 @@ describe('random_pr_sat_wrapped with explicit TruthTable', () => {
     const tt = new TruthTable(variables_in_constraints(constraints))
 
     const result = await random_pr_sat_wrapped(tt, constraints, {
-      semantics: 'trivalent',
+      semantics: 'trivalent-ers',
       seed: 'wrapped-pr3',
       search_attempts: 10,
     })
 
-    expect(result.semantics).toBe('trivalent')
+    expect(result.semantics).toBe('trivalent-ers')
     expect(result.solver_output.status).toBe('sat')
     if (result.solver_output.status === 'sat') {
       await expect(result.solver_output.evaluate(tt, { tag: 'constraint', constraint: constraints[0]! }))
@@ -249,6 +251,36 @@ describe('random_pr_sat_wrapped with explicit TruthTable', () => {
     const evaluate = build_rational_cooper_evaluator({ 0: ZERO, 1: ZERO, 2: ONE, 3: ZERO })
 
     await expect(evaluate(tt, { tag: 'real_expr', real_expr: pr(conditional) }))
+      .resolves.toEqual({ tag: 'result', result: { tag: 'literal', value: 1 } })
+  })
+
+  test('CCK random search uses the CCK truth table', async () => {
+    const constraints = [gt(pr(A), lit(0.5))]
+    const tt = new CCKTruthTable(variables_in_constraints(constraints))
+
+    const result = await random_pr_sat_wrapped(tt, constraints, {
+      semantics: 'trivalent-cck',
+      seed: 'cck-gap',
+      search_attempts: 10,
+    })
+
+    expect(result.semantics).toBe('trivalent-cck')
+    expect(result.solver_output.status).toBe('sat')
+    if (result.solver_output.status === 'sat') {
+      expect(tt.n_states()).toBe(3)
+      expect(Object.keys(result.solver_output.state_assignments).length).toBe(3)
+      await expect(result.solver_output.evaluate(tt, { tag: 'constraint', constraint: constraints[0]! }))
+        .resolves.toEqual({ tag: 'bool-result', result: true })
+    }
+  })
+
+  test('CCK rational evaluator totalizes all-gappy atomic probabilities', async () => {
+    const tt = new CCKTruthTable(variables_in_constraints([eq(pr(A), lit(1))]))
+    const evaluate = build_rational_cck_evaluator({ 0: ZERO, 1: ONE, 2: ZERO })
+
+    await expect(evaluate(tt, { tag: 'real_expr', real_expr: pr(A) }))
+      .resolves.toEqual({ tag: 'result', result: { tag: 'literal', value: 1 } })
+    await expect(evaluate(tt, { tag: 'real_expr', real_expr: pr(sentence_builder.not(A)) }))
       .resolves.toEqual({ tag: 'result', result: { tag: 'literal', value: 1 } })
   })
 })

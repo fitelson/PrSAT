@@ -82,7 +82,20 @@ describe('maple bridge end-to-end', () => {
     const constraints = trivalent_branch_lines.map((l) => (parse_constraint(l) as any)[1])
     const result = await random_pr_sat(constraints, {
       seed: 'tri-branch',
-      semantics: 'trivalent',
+      semantics: 'trivalent-ers',
+      search_attempts: 3,
+      maple_bridge_url: 'http://127.0.0.1:31415',
+    })
+    expect(result.solver_output.status).toBe('sat')
+    expect(result.used_maple_bridge).toBe(true)
+    expect(result.rational_model).toBeDefined()
+  }, 120_000)
+  test('CCK Santorio constraints use Maple equations and certify the boundary model', async () => {
+    if (!bridge_up) return
+    const constraints = trivalent_branch_lines.map((l) => (parse_constraint(l) as any)[1])
+    const result = await random_pr_sat(constraints, {
+      seed: 'cck-santorio',
+      semantics: 'trivalent-cck',
       search_attempts: 3,
       maple_bridge_url: 'http://127.0.0.1:31415',
     })

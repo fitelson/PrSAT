@@ -220,7 +220,37 @@ export const flatten_conjuncts = (constraints: Constraint[]): Constraint[] => {
 
 // Cross-multiplied polynomial form of the equation left = right, or undefined
 // if outside the supported fragment.
+const constant_value = (expr: RealExpr): number | undefined => {
+  if (expr.tag === 'literal') return expr.value
+  if (expr.tag === 'negative') {
+    const inner = constant_value(expr.expr)
+    return inner === undefined ? undefined : -inner
+  }
+  if (expr.tag === 'plus' || expr.tag === 'minus' || expr.tag === 'multiply' || expr.tag === 'divide') {
+    const left = expr.tag === 'divide' ? constant_value(expr.numerator) : constant_value(expr.left)
+    const right = expr.tag === 'divide' ? constant_value(expr.denominator) : constant_value(expr.right)
+    if (left === undefined || right === undefined) return undefined
+    if (expr.tag === 'plus') return left + right
+    if (expr.tag === 'minus') return left - right
+    if (expr.tag === 'multiply') return left * right
+    return right === 0 ? undefined : left / right
+  }
+  return undefined
+}
+
 const equation_to_poly = (left: RealExpr, right: RealExpr): Poly | undefined => {
+  const left_then = left.tag === 'ite' ? constant_value(left.then_expr) : undefined
+  const right_lit = constant_value(right)
+  if (left.tag === 'ite' && left_then !== undefined && right_lit !== undefined && left_then !== right_lit) {
+    return equation_to_poly(left.else_expr, right)
+  }
+
+  const right_then = right.tag === 'ite' ? constant_value(right.then_expr) : undefined
+  const left_lit = constant_value(left)
+  if (right.tag === 'ite' && right_then !== undefined && left_lit !== undefined && right_then !== left_lit) {
+    return equation_to_poly(left, right.else_expr)
+  }
+
   const l = real_expr_to_polyrat(left)
   const r = real_expr_to_polyrat(right)
   if (l === undefined || r === undefined) return undefined

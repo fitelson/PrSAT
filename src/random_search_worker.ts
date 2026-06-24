@@ -17,6 +17,7 @@
 import { random_pr_sat_wrapped, RandomSearchOptions } from './random_search'
 import { TruthTable, VariableLists } from './pr_sat'
 import { PrSat } from './types'
+import { CCKTruthTable } from './cck'
 
 type Constraint = PrSat['Constraint']
 
@@ -29,7 +30,9 @@ type WorkerRequest = {
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const { constraints, variables, options } = event.data
   try {
-    const tt = new TruthTable(variables)
+    const tt = options.semantics === 'trivalent-cck'
+      ? new CCKTruthTable(variables)
+      : new TruthTable(variables)
     const result = await random_pr_sat_wrapped(tt, constraints, {
       ...options,
       onTranslated: (translated) => {

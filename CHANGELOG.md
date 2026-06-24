@@ -2,6 +2,21 @@
 
 > **Note:** Experimental fork of 3.0 to prototype a Random Search solver alongside Z3. Not deployed. See `RANDOM_SEARCH.md` for the design, `CLAUDE.md` for guidance.
 
+## 2026-06-24
+
+### Added: Cantwell-Cooper-Kleene trivalent mode
+
+Added a second trivalent semantics, selected by the new `Trivalent (CCK)` control:
+
+- The user-facing language still has exactly one conditional token, `->`; `Trivalent (ERS)` and `Trivalent (CCK)` only select the semantic interpretation of the same input language.
+- New pure CCK semantic core in `src/cck.ts`: strong Kleene `~`, `&`, and `v`; Cooper `->`; Cantwell probability over true-plus-false rows; totalized zero-denominator convention via internal `ite`; and `3^n` atomic row enumeration with `N` rows.
+- New SMT wrapper in `src/cck_sat.ts`, kept separate from the pure CCK translator so Random Search workers do not bundle Z3.
+- Random Search accepts `trivalent-cck` semantics and reconstructs CCK model evaluators from exact rational worker results.
+- Model tables display CCK atomic rows with `⊤`, `N`, and `⊥`; ERS/classical tables remain bivalent.
+- Fixed a shared ERS/CCK Random Search + Maple extraction gap for totalized probability equations: when an internal `ite(d = 0, 1, n/d)` equation is set equal to a non-`1` constant, the extractor now sends the `n/d = c` branch to Maple and leaves only the genuine `= 1` zero-denominator cases as residual constraints.
+
+Verification: `npm run build`; `npx tsc --noEmit`; `npx vitest --run` (710 passing, 1 skipped); focused `npx vitest --run src/cooper.spec.ts src/cck.spec.ts src/maple_bridge.spec.ts` (13 passing).
+
 ## 2026-06-23
 
 ### Added: Pr3SAT / trivalent probability mode
@@ -13,7 +28,7 @@ Added an experimental Pr3SAT mode for Cooper-style trivalent probability:
 - The object-language conditional remains the single token `->`. In classical mode it has the material semantics; in trivalent mode it has the Cooper conditional semantics. Conditional probability `Pr(B | A)` is translated as `Pr(A -> B)` under the selected semantics.
 - Model evaluation uses the selected semantics too, so the evaluator pane reports trivalent values when `Trivalent (ERS)` is checked.
 - Random Search is wired through the same semantics flag and imports the pure Cooper translator rather than the Z3-facing Pr3SAT wrapper, keeping the worker bundle independent of Z3.
-- Result rendering marks trivalent SMT results as `Pr3SAT: ->_3 / Z3` and trivalent random-search results as `Trivalent Random Search`.
+- Result rendering marks trivalent SMT results by semantic mode (`ERS` or `CCK`) and trivalent random-search results by the selected semantics.
 - Fixed trivalent Random Search + Maple branch verification for zero-denominator case expressions: state-index substitution now descends into internal `ite` real expressions, with a regression covering `Pr(P -> Q) = 1/4`, `Pr(Q)=1/6`, `Pr(Q -> P) = 1`, and `Pr(P)=2/3`.
 
 Verification: `npm run build`; `npx vitest --run` (700 passing, 1 skipped); focused `npx vitest --run src/random_search.spec.ts src/pr3_sat.spec.ts` (36 passing).
