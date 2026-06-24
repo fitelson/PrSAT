@@ -52,7 +52,6 @@ test('single constraint', async ({ page }) => {
 test('public build exposes only the Z3 decision procedure', async ({ page }) => {
   await to_load(page)
 
-  await expect(page.getByText('Decision procedure: Z3')).toBeVisible()
   await expect(page.locator('select')).toHaveCount(0)
 })
 

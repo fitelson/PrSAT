@@ -1287,9 +1287,6 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
       generate_button,
       el('div', { style: 'display: flex; flex-direction: column; margin-left: 0.4em;' },
         el('label', {},
-          'Decision procedure: Z3',
-        ),
-        el('label', {},
           'Trivalent (ERS):',
           trivalent_toggle,
         ),
@@ -1985,7 +1982,7 @@ const main = (): HTMLElement => {
 
   return el('div', {},
     el('div', { class: 'header' },
-      el('div', { style: 'font-weight: bold; font-size: 1.5em;' }, 'PrSAT 3.1 Z3'),
+      el('div', { style: 'font-weight: bold; font-size: 1.5em;' }, 'PrSAT 3.1 (Experimental)'),
     ),
     // throw_button,
     global_error_display,

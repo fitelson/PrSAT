@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with this repository.
 
-## PrSAT 3.1 Z3
+## PrSAT 3.1 (Experimental)
 
 This is the public-facing PrSAT 3.1 branch for the browser-based Z3 decision procedure. It keeps the classical PrSAT engine and the experimental trivalent ERS/CCK semantic modes, but all solving routes through Z3.
 

@@ -1,4 +1,4 @@
-## PrSAT 3.1 Z3
+## PrSAT 3.1 (Experimental)
 
 PrSAT is a browser-based probability satisfiability checker. This public-facing 3.1 branch exposes the Z3 decision procedure with classical, Trivalent (ERS), and Trivalent (CCK) semantic modes.
 

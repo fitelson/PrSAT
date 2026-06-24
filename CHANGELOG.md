@@ -1,4 +1,4 @@
-# PrSAT 3.1 Z3 Changelog
+# PrSAT 3.1 (Experimental) Changelog
 
 ## 2026-06-24
 
