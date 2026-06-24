@@ -5,10 +5,8 @@ import { parse_constraint, parse_constraint_or_real_expr } from "./parser";
 import { constraint_to_string, letter_string, TruthTable, variables_in_constraints } from "./pr_sat";
 import { pr3_sat_wrapped, Pr3SATResult } from "./pr3_sat";
 import { FancyEvaluatorOutput, init_z3, ModelAssignmentOutput, pr_sat_wrapped, PrSATResult, WrappedSolver, WrappedSolverResult } from "./z3_integration";
-import { build_rational_cck_evaluator, build_rational_cooper_evaluator, build_rational_evaluator, ProbabilitySemantics, RandomPrSATResult, DEFAULT_SEARCH_ATTEMPTS, RandomSearchOptions } from "./random_search";
 import { CCKTruthTable, table_truth_value } from "./cck";
 import { cck_sat_wrapped, CCKSATResult } from "./cck_sat";
-import { ping_maple_bridge, DEFAULT_MAPLE_BRIDGE_URL } from "./maple_bridge_client";
 import { s_to_string } from "./s";
 import { ConstraintOrRealExpr, PrSat } from "./types";
 import { InputBlockLogic } from "./display_logic";
@@ -25,8 +23,8 @@ import * as htmlToImage from 'html-to-image';
 const root = assert_exists(document.getElementById('app'), 'Root element with id \'#app\' doesn\'t exist!')
 
 type Constraint = PrSat['Constraint']
-type SolverMethod = 'z3' | 'random'
-type SolverResult = PrSATResult | Pr3SATResult | CCKSATResult | RandomPrSATResult
+type ProbabilitySemantics = 'classical' | 'trivalent-ers' | 'trivalent-cck'
+type SolverResult = PrSATResult | Pr3SATResult | CCKSATResult
 // type RealExpr = PrSat['RealExpr']
 // type Sentence = PrSat['Sentence']
 
@@ -1256,17 +1254,9 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
   const timeout_input = timeout(timeout_ms)
   timeout_ms.watch((ms) => { console.log('timeout set to:', ms) })
 
-  // Solver method selects the engine; semantic mode selects the interpretation
-  // of the one object-language conditional.
-  const solver_method = new Editable<SolverMethod>('z3')
+  // Semantic mode selects the interpretation of the one object-language
+  // conditional. All modes use the Z3 decision procedure.
   const probability_semantics = new Editable<ProbabilitySemantics>('classical')
-  const solver_method_select = tel(TestId.solver_method.select, 'select', { style: 'margin-left: 0.4em;' },
-    el('option', { value: 'z3' }, 'SMT (Z3)'),
-    el('option', { value: 'random' }, 'Random Search'),
-  ) as HTMLSelectElement
-  solver_method_select.addEventListener('change', () => {
-    solver_method.set(solver_method_select.value as SolverMethod)
-  })
   const trivalent_toggle = tel(TestId.solver_method.trivalent_toggle, 'input', {
     type: 'checkbox',
     style: 'margin-left: 0.4em;',
@@ -1286,47 +1276,6 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
   trivalent_cck_toggle.addEventListener('change', () => {
     set_probability_semantics(trivalent_cck_toggle.checked ? 'trivalent-cck' : 'classical')
   })
-
-  // Random-search-only inputs. Visible only when solver_method === 'random'.
-  const random_seed = new Editable<string>('')
-  const seed_input = tel(TestId.solver_method.seed_input, 'input', { type: 'text', placeholder: '(auto)', style: 'margin-left: 0.4em; width: 12ch;' }) as HTMLInputElement
-  seed_input.addEventListener('change', () => { random_seed.set(seed_input.value) })
-
-  const random_attempts = new Editable<number>(DEFAULT_SEARCH_ATTEMPTS)
-  const attempts_input = tel(TestId.solver_method.attempts_input, 'input', {
-    type: 'number', min: '1', max: '100', value: String(DEFAULT_SEARCH_ATTEMPTS),
-    style: 'margin-left: 0.4em; width: 5ch;',
-  }) as HTMLInputElement
-  attempts_input.addEventListener('change', () => {
-    const n = Math.max(1, Math.min(100, parseInt(attempts_input.value) || DEFAULT_SEARCH_ATTEMPTS))
-    attempts_input.value = String(n)
-    random_attempts.set(n)
-  })
-
-  // Local Maple bridge detection (optional; run `npm run maple-bridge`).
-  const maple_bridge_available = new Editable(false)
-  const maple_bridge_indicator = el('span', { style: 'margin-left: 0.4em; font-size: 0.85em; color: #888;' }, 'Maple bridge: checking…')
-  const refresh_maple_bridge = () => {
-    ping_maple_bridge().then((ok) => {
-      maple_bridge_available.set(ok)
-      maple_bridge_indicator.textContent = ok ? 'Maple bridge: connected' : 'Maple bridge: off'
-      maple_bridge_indicator.style.color = ok ? '#1a7f37' : '#888'
-    }).catch(() => {})
-  }
-  refresh_maple_bridge()
-  maple_bridge_indicator.onclick = refresh_maple_bridge
-  maple_bridge_indicator.style.cursor = 'pointer'
-  maple_bridge_indicator.title = 'Click to re-check. Start with: npm run maple-bridge'
-
-  const random_options_row = el('div', { style: 'display: none; flex-wrap: wrap; gap: 0.8em; margin-top: 0.2em;' },
-    el('label', {}, 'Seed:', seed_input),
-    el('label', {}, 'Attempts:', attempts_input),
-    maple_bridge_indicator,
-  )
-  solver_method.watch((m) => {
-    random_options_row.style.display = m === 'random' ? 'flex' : 'none'
-    invalidate()
-  })
   probability_semantics.watch(() => {
     trivalent_toggle.checked = probability_semantics.get() === 'trivalent-ers'
     trivalent_cck_toggle.checked = probability_semantics.get() === 'trivalent-cck'
@@ -1338,8 +1287,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
       generate_button,
       el('div', { style: 'display: flex; flex-direction: column; margin-left: 0.4em;' },
         el('label', {},
-          'Solver:',
-          solver_method_select,
+          'Decision procedure: Z3',
         ),
         el('label', {},
           'Trivalent (ERS):',
@@ -1359,7 +1307,6 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
         ),
       ),
     ),
-    random_options_row,
   )
   
   const set_all_constraints = (all_constraints: Constraint[] | undefined) => {
@@ -1577,59 +1524,8 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
           constraints_view.appendChild(el('div', { style: 'margin-top: 0.4em;' }, e))
         }
       }
-      const run_random_search_in_worker = (): Promise<RandomPrSATResult> => new Promise((resolve) => {
-        const worker = new Worker(new URL('./random_search_worker.ts', import.meta.url), { type: 'module' })
-        const options: Partial<Omit<RandomSearchOptions, 'abort_signal' | 'onTranslated'>> = {
-          regular: is_regular,
-          semantics: semantic_mode,
-          seed: random_seed.get() === '' ? undefined : random_seed.get(),
-          search_attempts: random_attempts.get(),
-          maple_bridge_url: maple_bridge_available.get() ? DEFAULT_MAPLE_BRIDGE_URL : undefined,
-        }
-        const cancelled: RandomPrSATResult = {
-          constraints: { original: constraints, translated: [], extra: [], eliminated: [] },
-          smtlib_input: '; cancelled',
-          method: 'random',
-          semantics: semantic_mode,
-          seed: random_seed.get(),
-          attempts_used: 0,
-          solver_output: { status: 'cancelled' },
-        }
-        const on_abort = () => {
-          worker.terminate()
-          resolve(cancelled)
-        }
-        abort_controller.signal.addEventListener('abort', on_abort)
-        worker.onmessage = (event: MessageEvent) => {
-          const msg = event.data
-          if (msg.tag === 'translated') {
-            on_translated(msg.translated)
-          } else if (msg.tag === 'done') {
-            abort_controller.signal.removeEventListener('abort', on_abort)
-            worker.terminate()
-            const result: RandomPrSATResult = msg.result
-            // Rebuild the non-cloneable evaluator from the exact rational model.
-            if (result.solver_output.status === 'sat' && result.rational_model !== undefined) {
-              result.solver_output.evaluate = result.semantics === 'trivalent-ers'
-                ? build_rational_cooper_evaluator(result.rational_model)
-                : result.semantics === 'trivalent-cck'
-                  ? build_rational_cck_evaluator(result.rational_model)
-                  : build_rational_evaluator(result.rational_model)
-            }
-            resolve(result)
-          } else if (msg.tag === 'error') {
-            abort_controller.signal.removeEventListener('abort', on_abort)
-            worker.terminate()
-            resolve({ ...cancelled, smtlib_input: `; error: ${msg.message}`, solver_output: { status: 'exception', message: msg.message } })
-          }
-        }
-        worker.postMessage({ constraints, variables: truth_table.variables, options })
-      })
-      const method = solver_method.get()
       const semantics = semantic_mode
-      const result: SolverResult = method === 'random'
-        ? await run_random_search_in_worker()
-        : semantics === 'trivalent-ers'
+      const result: SolverResult = semantics === 'trivalent-ers'
           ? await pr3_sat_wrapped(solver, truth_table, constraints, {
               regular: is_regular,
               timeout_ms: timeout_ms.get(),
@@ -1800,6 +1696,8 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
     model_part.classList.remove('invalidated')
     cancel_button.disabled = true
     regular_toggle.disabled = state.tag === 'looking'
+    trivalent_toggle.disabled = state.tag === 'looking'
+    trivalent_cck_toggle.disabled = state.tag === 'looking'
     for (const input of timeout_input.getElementsByTagName('input')) {
       input.disabled = state.tag === 'looking'
     }
@@ -1834,24 +1732,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
       state_display.innerHTML = ''
       state_display.append(status_label)
 
-      // Random-search badge: method / seed / attempts_used.
-      if ('method' in so && so.method === 'random') {
-        const random_method = so.semantics === 'trivalent-ers'
-          ? 'Trivalent (ERS) Random Search'
-          : so.semantics === 'trivalent-cck'
-            ? 'Trivalent (CCK) Random Search'
-            : 'Random Search'
-        const badge_parts: string[] = [so.used_maple_bridge ? `via ${random_method} + Maple bridge` : `via ${random_method}`]
-        badge_parts.push(`seed: ${so.seed}`)
-        badge_parts.push(`attempt ${so.attempts_used}/${so.attempts_used > 0 ? so.attempts_used : 1}`)
-        if (so.final_fmin !== undefined && Number.isFinite(so.final_fmin)) {
-          badge_parts.push(`best f=${so.final_fmin.toExponential(2)}`)
-        }
-        state_display.append(' ')
-        state_display.appendChild(tel(TestId.solver_method.badge, 'span', {
-          style: 'font-size: 0.85em; color: #555; margin-left: 0.6em;',
-        }, `(${badge_parts.join(', ')})`))
-      } else if ('method' in so && so.method === 'pr3') {
+      if ('method' in so && so.method === 'pr3') {
         state_display.append(' ')
         state_display.appendChild(tel(TestId.solver_method.badge, 'span', {
           style: 'font-size: 0.85em; color: #555; margin-left: 0.6em;',
@@ -2104,7 +1985,7 @@ const main = (): HTMLElement => {
 
   return el('div', {},
     el('div', { class: 'header' },
-      el('div', { style: 'font-weight: bold; font-size: 1.5em;' }, 'PrSAT 3.1 (experimental)'),
+      el('div', { style: 'font-weight: bold; font-size: 1.5em;' }, 'PrSAT 3.1 Z3'),
     ),
     // throw_button,
     global_error_display,

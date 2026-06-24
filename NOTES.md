@@ -1,4 +1,4 @@
-# PrSAT 3.0 Development Notes
+# PrSAT 3.1 Z3 Development Notes
 
 ## Session: February 11, 2026
 

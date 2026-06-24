@@ -18,7 +18,6 @@ import { parse_constraint } from './parser'
 import { pr3_sat_wrapped } from './pr3_sat'
 import { assert_result } from './utils'
 import { init_z3, WrappedSolver } from './z3_integration'
-import { extract_equation_system } from './equation_elimination'
 
 const S = sentence_builder
 const R = real_expr_builder
@@ -80,7 +79,7 @@ describe('Cantwell-Cooper-Kleene trivalent semantics', () => {
       ))
   })
 
-  test('non-one totalized probability equations are available to polynomial extraction', () => {
+  test('non-one totalized probability equations translate with residual totalization constraints', () => {
     const constraints = [
       parse('Pr(P -> Q) = 1/4'),
       parse('Pr(Q) = 1/6'),
@@ -89,10 +88,8 @@ describe('Cantwell-Cooper-Kleene trivalent semantics', () => {
     ]
     const tt = new CCKTruthTable(variables_in_constraints(constraints))
     const translated = translate_constraints_cck(tt, constraints)
-    const { equation_polys, other_conjuncts } = extract_equation_system(translated)
-
-    expect(equation_polys).toHaveLength(3)
-    expect(other_conjuncts).toHaveLength(1)
+    expect(translated).toHaveLength(4)
+    expect(translated.every((constraint) => constraint.tag === 'equal')).toBe(true)
   })
 })
 

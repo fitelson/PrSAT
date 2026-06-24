@@ -499,7 +499,7 @@ Pr(P & (Q <> C)) < 1
 
 % Industrial Strength Example with 63 real variables
 % Example #2: 63 real variables -- solved instantly by PrSAT 3.0b.  
-% Takes 600+ seconds on PrSAT 2.5 random search!
+% Hard benchmark from older PrSAT testing.
 Pr(A & B & H) = Pr(A) * Pr(B) * Pr(H | A & B)
 Pr(A & B & ~H) = Pr(A) * Pr(B) * Pr(~H | A & B)
 Pr(A & ~B & H) = Pr(A) * Pr(~B) * Pr(H | A & ~B)
