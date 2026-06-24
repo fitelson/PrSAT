@@ -481,7 +481,7 @@ export const model_assignment_output_to_s = (output: ModelAssignmentOutput): S =
   }
 }
 
-const expr_to_assignment = async <CtxKey extends string>(ctx: Context<CtxKey>, model: Model<CtxKey>, expr: Expr<CtxKey>): Promise<ModelAssignmentOutput> => {
+export const expr_to_assignment = async <CtxKey extends string>(ctx: Context<CtxKey>, model: Model<CtxKey>, expr: Expr<CtxKey>): Promise<ModelAssignmentOutput> => {
   const value_expr = await ctx.simplify(model.eval(expr))
   // const value_expr = await ctx.simplify(ctx.Real.val(-2138))
   const parsed_s = parse_s(value_expr.sexpr())
@@ -537,6 +537,12 @@ export const real_expr_to_arith = <CtxKey extends string>(ctx: Context<CtxKey>, 
   const sub = (expr: RealExpr): Arith<CtxKey> => real_expr_to_arith(ctx, model, expr)
   if (expr.tag === 'divide') {
     return ctx.Div(sub(expr.numerator), sub(expr.denominator))
+  } else if (expr.tag === 'ite') {
+    return ctx.If(
+      constraint_to_bool(ctx, model, expr.condition),
+      sub(expr.then_expr),
+      sub(expr.else_expr),
+    ) as Arith<CtxKey>
   } else if (expr.tag === 'given_probability') {
     throw new Error('Unable to convert conditional probability to a Z3 arith expression!')
   } else if (expr.tag === 'literal') {
@@ -700,6 +706,9 @@ export type WrappedSolverResult =
   | { status: 'exception', message: string }
   | { status: 'cancelled' }
 
+export type ModelEvaluator = (tt: TruthTable, c_or_re: ConstraintOrRealExpr) => Promise<FancyEvaluatorOutput>
+export type ModelEvaluatorFactory = <CtxKey extends string>(ctx: Context<CtxKey>, model: Model<CtxKey>) => ModelEvaluator
+
 type SolverOptions2 = {
   regular: boolean
   abort_signal?: AbortSignal
@@ -840,8 +849,12 @@ export class WrappedSolver {
     console.log('reinitialized?', old !== this.z3_interface)
   }
 
-  // async solve(smtlib_lines: S[], abort_signal?: AbortSignal, cancel_fallback?: () => Promise<undefined>): Promise<WrappedSolverResult> {
-  async solve(smtlib_string: string, abort_signal?: AbortSignal, cancel_fallback?: () => Promise<undefined>): Promise<WrappedSolverResult> {
+  async solve_with_evaluator(
+    smtlib_string: string,
+    make_evaluator: ModelEvaluatorFactory,
+    abort_signal?: AbortSignal,
+    cancel_fallback?: () => Promise<undefined>,
+  ): Promise<WrappedSolverResult> {
     // This function is about to get more complicated -- yay!
     // On cancel, attempt interrupt.
     // If the interrupt succeeds within a certain timeout, resolve with a 'cancel' status.
@@ -882,9 +895,7 @@ export class WrappedSolver {
           const result = await solver.check()
           if (result === 'sat') {
             const model = solver.model()
-            const evaluate = async (tt: TruthTable, c_or_re: ConstraintOrRealExpr): Promise<FancyEvaluatorOutput> => {
-              return await fancy_evaluate_constraint_or_real_expr(used_ctx, model, tt, c_or_re)
-            }
+            const evaluate = make_evaluator(used_ctx, model)
             const state_assignments = await model_to_assignments(used_ctx, model)
             return { status: 'sat', evaluate, state_assignments }
           } else {
@@ -910,6 +921,17 @@ export class WrappedSolver {
       },
       2 * 2000,  // two seconds before slow_cancel
       abort_signal,
+    )
+  }
+
+  // async solve(smtlib_lines: S[], abort_signal?: AbortSignal, cancel_fallback?: () => Promise<undefined>): Promise<WrappedSolverResult> {
+  async solve(smtlib_string: string, abort_signal?: AbortSignal, cancel_fallback?: () => Promise<undefined>): Promise<WrappedSolverResult> {
+    return await this.solve_with_evaluator(
+      smtlib_string,
+      (ctx, model) => async (tt: TruthTable, c_or_re: ConstraintOrRealExpr): Promise<FancyEvaluatorOutput> =>
+        await fancy_evaluate_constraint_or_real_expr(ctx, model, tt, c_or_re),
+      abort_signal,
+      cancel_fallback,
     )
   }
 }

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import {
   random_pr_sat,
   random_pr_sat_wrapped,
+  build_rational_cooper_evaluator,
   sample_dirichlet_ones,
   rational_to_model_assignment,
   try_rationalize_and_verify,
@@ -21,7 +22,7 @@ type Constraint = PrSat['Constraint']
 
 const { pr, lit, power } = real_expr_builder
 const { eq, gt, lt, cand } = constraint_builder
-const { letter } = sentence_builder
+const { and, imp, letter } = sentence_builder
 
 const A = letter('A')
 const B = letter('B')
@@ -220,6 +221,35 @@ describe('random_pr_sat_wrapped with explicit TruthTable', () => {
     expect(result.constraints.translated.length).toBe(1)
     // enriched (no pre-elimination) = prob axioms (3: a_0 >= 0, a_1 >= 0, sum = 1) + div0 (0) + translated (1) = 4
     expect(result.constraints.extra.length).toBe(4)
+  })
+
+  test('trivalent semantics uses Cooper translation', async () => {
+    const C = letter('C')
+    const conditional = imp(A, B)
+    const constraints = [gt(pr(and(conditional, C)), pr(conditional))]
+    const tt = new TruthTable(variables_in_constraints(constraints))
+
+    const result = await random_pr_sat_wrapped(tt, constraints, {
+      semantics: 'trivalent',
+      seed: 'wrapped-pr3',
+      search_attempts: 10,
+    })
+
+    expect(result.semantics).toBe('trivalent')
+    expect(result.solver_output.status).toBe('sat')
+    if (result.solver_output.status === 'sat') {
+      await expect(result.solver_output.evaluate(tt, { tag: 'constraint', constraint: constraints[0]! }))
+        .resolves.toEqual({ tag: 'bool-result', result: true })
+    }
+  })
+
+  test('trivalent rational evaluator returns 1 on a dynamic zero denominator', async () => {
+    const conditional = imp(A, B)
+    const tt = new TruthTable(variables_in_constraints([eq(pr(conditional), lit(1))]))
+    const evaluate = build_rational_cooper_evaluator({ 0: ZERO, 1: ZERO, 2: ONE, 3: ZERO })
+
+    await expect(evaluate(tt, { tag: 'real_expr', real_expr: pr(conditional) }))
+      .resolves.toEqual({ tag: 'result', result: { tag: 'literal', value: 1 } })
   })
 })
 

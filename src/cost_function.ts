@@ -102,6 +102,26 @@ export const normalize_constraint = (c: Constraint): Constraint => {
 
 // ---------- Numeric RealExpr evaluation ----------
 
+const NUMERIC_BOOL_TOLERANCE = 1e-12
+
+const evaluate_constraint_bool_number = (c: Constraint, x: number[]): boolean => {
+  const sub = (cc: Constraint) => evaluate_constraint_bool_number(cc, x)
+  const cmp = (left: RealExpr, right: RealExpr) => evaluate_real_expr_number(left, x) - evaluate_real_expr_number(right, x)
+
+  if (c.tag === 'equal') return Math.abs(cmp(c.left, c.right)) <= NUMERIC_BOOL_TOLERANCE
+  if (c.tag === 'not_equal') return Math.abs(cmp(c.left, c.right)) > NUMERIC_BOOL_TOLERANCE
+  if (c.tag === 'greater_than') return cmp(c.left, c.right) > 0
+  if (c.tag === 'greater_than_or_equal') return cmp(c.left, c.right) >= 0
+  if (c.tag === 'less_than') return cmp(c.left, c.right) < 0
+  if (c.tag === 'less_than_or_equal') return cmp(c.left, c.right) <= 0
+  if (c.tag === 'negation') return !sub(c.constraint)
+  if (c.tag === 'conjunction') return sub(c.left) && sub(c.right)
+  if (c.tag === 'disjunction') return sub(c.left) || sub(c.right)
+  if (c.tag === 'conditional') return !sub(c.left) || sub(c.right)
+  if (c.tag === 'biconditional') return sub(c.left) === sub(c.right)
+  throw new Error(`evaluate_constraint_bool_number: fallthrough`)
+}
+
 // Evaluate a RealExpr to a Number given state variable assignments.
 // Assumes the expression has been translated (no probability / given_probability)
 // and eliminated (so state_variable_sum indices only refer to free variables,
@@ -131,6 +151,7 @@ export const evaluate_real_expr_number = (expr: RealExpr, x: number[]): number =
   if (expr.tag === 'plus') return sub(expr.left) + sub(expr.right)
   if (expr.tag === 'minus') return sub(expr.left) - sub(expr.right)
   if (expr.tag === 'multiply') return sub(expr.left) * sub(expr.right)
+  if (expr.tag === 'ite') return sub(evaluate_constraint_bool_number(expr.condition, x) ? expr.then_expr : expr.else_expr)
   if (expr.tag === 'divide') return sub(expr.numerator) / sub(expr.denominator)
   if (expr.tag === 'power') return Math.pow(sub(expr.base), sub(expr.exponent))
   throw new Error(`evaluate_real_expr_number: fallthrough`)

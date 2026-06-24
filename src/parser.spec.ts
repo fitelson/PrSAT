@@ -17,7 +17,7 @@ const [A, B, C] = [letter('A'), letter('B'), letter('C')]
 const [D, E, F] = [letter('D'), letter('E'), letter('F')]
 
 const shared_random = new Random()
-const fuzz_options: FuzzerOptions<any, any> = { target_depth: 6, exclude: { RealExpr: ['state_variable_sum'] } }
+const fuzz_options: FuzzerOptions<any, any> = { target_depth: 6, exclude: { RealExpr: ['state_variable_sum', 'ite'] } }
 const fuzzers = PrSatFuncs.first_order().fuzzers(shared_random)
 
 describe('parse', () => {

@@ -35,6 +35,7 @@ export const real_expr_builder = {
   multiply: (left: RealExpr, right: RealExpr): RealExprMap['multiply'] => ({ tag: 'multiply', left, right }),
   divide: (numerator: RealExpr, denominator: RealExpr): RealExprMap['divide'] => ({ tag: 'divide', numerator, denominator }),
   power: (base: RealExpr, exponent: RealExpr): RealExprMap['power'] => ({ tag: 'power', base, exponent }),
+  ite: (condition: Constraint, then_expr: RealExpr, else_expr: RealExpr): RealExprMap['ite'] => ({ tag: 'ite', condition, then_expr, else_expr }),
 }
 const { svs, lit, minus, plus, pr } = real_expr_builder
 // const { state_variable_sum: svs, literal: lit } = PrSatFuncs.inits.RealExpr
@@ -494,6 +495,10 @@ const letters_in_real_expr = (expr: RealExpr, letters: VariableLists): VariableL
   } else if (expr.tag === 'divide') {
     const nl = letters_in_real_expr(expr.numerator, letters)
     return letters_in_real_expr(expr.denominator, nl)
+  } else if (expr.tag === 'ite') {
+    const cl = letters_in_constraint(expr.condition, letters)
+    const tl = letters_in_real_expr(expr.then_expr, cl)
+    return letters_in_real_expr(expr.else_expr, tl)
   } else {
     const ll = letters_in_real_expr(expr.left, letters)
     return letters_in_real_expr(expr.right, ll)
@@ -619,6 +624,19 @@ export const constraint_to_random_string = (random: Random, c: Constraint): stri
 
 const real_expr_to_gen_string = (expr: RealExpr, s2s: (s: Sentence) => string): string => {
   const sub = (expr: RealExpr): string => real_expr_to_gen_string(expr, s2s)
+  const condition_to_string = (condition: Constraint): string => constraint_to_gen_string(condition, {
+    negation: () => assert_exists(possible_constraint_connectives['negation'][0]),
+    disjunction: () => assert_exists(possible_constraint_connectives['disjunction'][0]),
+    conjunction: () => assert_exists(possible_constraint_connectives['conjunction'][0]),
+    conditional: () => assert_exists(possible_constraint_connectives['conditional'][0]),
+    biconditional: () => assert_exists(possible_constraint_connectives['biconditional'][0]),
+    equal: () => assert_exists(possible_constraint_connectives['equal'][0]),
+    not_equal: () => assert_exists(possible_constraint_connectives['not_equal'][0]),
+    less_than: () => assert_exists(possible_constraint_connectives['less_than'][0]),
+    less_than_or_equal: () => assert_exists(possible_constraint_connectives['less_than_or_equal'][0]),
+    greater_than: () => assert_exists(possible_constraint_connectives['greater_than'][0]),
+    greater_than_or_equal: () => assert_exists(possible_constraint_connectives['greater_than_or_equal'][0]),
+  }, sub)
 
   const wrap = (expr: RealExpr): string => {
     const sub_str = sub(expr)
@@ -653,6 +671,8 @@ const real_expr_to_gen_string = (expr: RealExpr, s2s: (s: Sentence) => string): 
     }
   } else if (expr.tag === 'divide') {
     return `${wrap(expr.numerator)} / ${wrap(expr.denominator)}`
+  } else if (expr.tag === 'ite') {
+    return `ite(${condition_to_string(expr.condition)}, ${sub(expr.then_expr)}, ${sub(expr.else_expr)})`
   } else {
     const c =
       expr.tag === 'plus' ? '+'
@@ -798,6 +818,12 @@ export const div0_conditions_in_real_expr = (expr: RealExpr): Constraint[] => {
       ...div0_conditions_in_real_expr(expr.numerator),
       ...div0_conditions_in_real_expr(expr.denominator),
     ]
+  } else if (expr.tag === 'ite') {
+    return [
+      ...div0_conditions_in_single_constraint(expr.condition),
+      ...div0_conditions_in_real_expr(expr.then_expr).map((c) => constraint_builder.cimp(expr.condition, c)),
+      ...div0_conditions_in_real_expr(expr.else_expr).map((c) => constraint_builder.cimp(constraint_builder.cnot(expr.condition), c)),
+    ]
   } else {
     throw new Error('div0_condition_in_real_expr fallthrough')
   }
@@ -852,6 +878,13 @@ const eliminate_state_variable_index_in_real_expr = (index: number, inverted_red
     return { tag: 'divide', numerator: sub(e.numerator), denominator: sub(e.denominator) }
   } else if (e.tag === 'given_probability') {
     return e
+  } else if (e.tag === 'ite') {
+    return {
+      tag: 'ite',
+      condition: eliminate_state_variable_index_in_constraint(index, inverted_redef, e.condition),
+      then_expr: sub(e.then_expr),
+      else_expr: sub(e.else_expr),
+    }
   } else if (e.tag === 'literal') {
     return e
   } else if (e.tag === 'minus') {
@@ -1181,6 +1214,13 @@ export const translate_real_expr = (tt: TruthTable, expr: RealExpr): RealExpr =>
     const tn = translate_real_expr(tt, expr.numerator)
     const td = translate_real_expr(tt, expr.denominator)
     return { tag: 'divide', numerator: tn, denominator: td }
+  } else if (expr.tag === 'ite') {
+    return {
+      tag: 'ite',
+      condition: translate_constraint(tt, expr.condition),
+      then_expr: translate_real_expr(tt, expr.then_expr),
+      else_expr: translate_real_expr(tt, expr.else_expr),
+    }
   } else if (expr.tag === 'power') {
     const tb = translate_real_expr(tt, expr.base)
     const te = translate_real_expr(tt, expr.exponent)
@@ -1301,6 +1341,8 @@ export const real_expr_to_smtlib = (expr: RealExpr): S => {
   } else if (expr.tag === 'divide') {
     return ['/', ...flatten_children(expr.tag, expr.numerator), real_expr_to_smtlib(expr.denominator)]
     // return ['div', ...flatten_children(expr.tag, expr.numerator), real_expr_to_smtlib(expr.denominator)]
+  } else if (expr.tag === 'ite') {
+    return ['ite', constraint_to_smtlib(expr.condition), real_expr_to_smtlib(expr.then_expr), real_expr_to_smtlib(expr.else_expr)]
   } else {
     throw new Error('real_expr_to_smtlib fallthrough')
   }
@@ -1449,10 +1491,12 @@ export class RealExprFuzzer {
       multiply: { arity: 2, construct: ([left, right]) => ({ tag: 'multiply', left: ae(left), right: ae(right) }) },
       divide: { arity: 2, construct: ([n, d]) => ({ tag: 'divide', numerator: ae(n), denominator: ae(d) }) },
       power: { arity: 1, construct: ([b]) => ({ tag: 'power', base: ae(b), exponent: lit(this.random.integer({ lower: 0, upper: 4 })) }) },
+      ite: { arity: 2, construct: ([then_expr, else_expr]) => ({ tag: 'ite', condition: eq(lit(0), lit(0)), then_expr: ae(then_expr), else_expr: ae(else_expr) }) },
       // root: { arity: 1, construct: ([r]) => ({ tag: 'root', radicand: ae(r), root: this.random.integer() }) },
     }
 
-    const gen = make_generator(fs, this.include, this.exclude)
+    const exclude = this.exclude ?? (this.include === undefined ? ['ite'] : undefined)
+    const gen = make_generator(fs, this.include, exclude)
     return gen(this.random, depth)
   }
 }
@@ -1639,6 +1683,8 @@ export const evaluate_real_expr = (tt: TruthTable, state_values: Record<number, 
     return evaluate_real_expr(tt, state_values, expr.left) * evaluate_real_expr(tt, state_values, expr.right)
   } else if (expr.tag === 'divide') {
     return evaluate_real_expr(tt, state_values, expr.numerator) / evaluate_real_expr(tt, state_values, expr.denominator)
+  } else if (expr.tag === 'ite') {
+    return evaluate_real_expr(tt, state_values, evaluate_constraint(tt, state_values, expr.condition) ? expr.then_expr : expr.else_expr)
   } else {
     return fallthrough('evaluate_real_expr', expr)
   }
@@ -1686,6 +1732,10 @@ export const free_real_variables_in_real_expr = (expr: RealExpr, set: Set<string
   if (expr.tag === 'divide') {
     sub(expr.numerator)
     sub(expr.denominator)
+  } else if (expr.tag === 'ite') {
+    free_real_variables_in_constraint(expr.condition, set)
+    sub(expr.then_expr)
+    sub(expr.else_expr)
   } else if (expr.tag === 'given_probability') {
     // nothing!
   } else if (expr.tag === 'literal') {
@@ -1814,6 +1864,10 @@ export const free_sentence_variables_in_real_expr = (expr: RealExpr, set: Letter
     if (expr.tag === 'divide') {
       sub(expr.numerator)
       sub(expr.denominator)
+    } else if (expr.tag === 'ite') {
+      free_sentence_variables_in_constraint(expr.condition, set, declared)
+      sub(expr.then_expr)
+      sub(expr.else_expr)
     } else if (expr.tag === 'given_probability') {
       free_sentence_variables(expr.arg, set, declared)
       free_sentence_variables(expr.given, set, declared)
@@ -1950,6 +2004,10 @@ export const evaluate_real_expr_2 = (tt: TruthTable, state_values: Record<number
           }
         },
       )
+    } else if (expr.tag === 'ite') {
+      const condition = evaluate_constraint_2(tt, state_values, expr.condition)
+      if (!condition[0]) return condition
+      return evaluate_real_expr_2(tt, state_values, condition[1] ? expr.then_expr : expr.else_expr)
     } else {
       return fallthrough('evaluate_real_expr', expr)
     }

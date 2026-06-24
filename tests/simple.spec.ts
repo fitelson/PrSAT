@@ -106,6 +106,27 @@ test('solver dropdown hides random options when Z3 is selected', async ({ page }
   await expect(page.getByTestId(TestId.solver_method.seed_input)).not.toBeVisible()
 })
 
+test('trivalent toggle runs through the visible selector', async ({ page }) => {
+  await to_load(page)
+  const test_ids = TestId.generic_multi_input('constraints')
+
+  const single_input = page.getByTestId(test_ids.split.single.get(0))
+  await single_input.getByTestId(test_ids.split.input).fill('Pr((A -> B) & C) > Pr(A -> B)')
+
+  const solver_select = page.getByTestId(TestId.solver_method.select)
+  await solver_select.selectOption('z3')
+  await page.getByTestId(TestId.solver_method.trivalent_toggle).check()
+  await expect(page.getByTestId(TestId.solver_method.seed_input)).not.toBeVisible()
+
+  await page.getByTestId(TestId.find_model).click()
+  await expect(page.getByText(Constants.SAT)).toBeVisible({ timeout: DEFAULT_TIMEOUT })
+
+  const badge = page.getByTestId(TestId.solver_method.badge)
+  await expect(badge).toBeVisible()
+  await expect(badge).toContainText('Pr3SAT')
+  await expect(badge).toContainText('→₃')
+})
+
 test('adding a bunch of constraints', async ({ page }) => {
   await to_load(page)
   const test_ids = TestId.generic_multi_input('constraints')

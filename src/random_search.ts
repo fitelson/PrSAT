@@ -61,6 +61,10 @@ import {
 import {
   FancyEvaluatorOutput, ModelAssignmentOutput, WrappedSolverResult,
 } from './z3_integration'
+import {
+  translate_constraints_cooper,
+  translate_constraint_or_real_expr_cooper,
+} from './cooper'
 
 type Constraint = PrSat['Constraint']
 type RealExpr = PrSat['RealExpr']
@@ -68,6 +72,7 @@ type RealExpr = PrSat['RealExpr']
 export const DEFAULT_REG_MARGIN = 1e-3
 export const DEFAULT_SEARCH_ATTEMPTS = 3
 export const DEFAULT_MAX_RATIONALIZE_ATTEMPTS = 40
+export type ProbabilitySemantics = 'classical' | 'trivalent'
 
 // Numeric acceptance threshold. Non-strict inequalities sitting exactly on
 // their boundary (e.g. a state pinned to 0 by a certainty constraint) have
@@ -90,6 +95,7 @@ const is_pretty_model = (full: Record<number, Rational>, max_den: bigint = DEFAU
 }
 
 export type RandomSearchOptions = {
+  semantics: ProbabilitySemantics
   regular: boolean
   search_attempts: number
   margin: number
@@ -104,6 +110,7 @@ export type RandomSearchOptions = {
 }
 
 const DEFAULTS: Omit<RandomSearchOptions, 'seed' | 'abort_signal' | 'onTranslated'> = {
+  semantics: 'classical',
   regular: false,
   search_attempts: DEFAULT_SEARCH_ATTEMPTS,
   margin: MATHEMATICA_MARGIN,
@@ -124,6 +131,7 @@ export type RandomPrSATResult = {
   }
   smtlib_input: string
   method: 'random'
+  semantics: ProbabilitySemantics
   seed: string
   used_maple_bridge?: boolean
   // Exact rational model (when sat) — plain data, so it survives the
@@ -137,7 +145,10 @@ export type RandomPrSATResult = {
 
 const describe_run = (opts: RandomSearchOptions, seed: string, attempts_used: number, status: string, fmin?: number): string => {
   const lines = [
-    `; PrSAT Random Search run`,
+    opts.semantics === 'trivalent'
+      ? `; Trivalent Random Search run`
+      : `; PrSAT Random Search run`,
+    `; semantics = ${opts.semantics}`,
     `; seed = ${seed}`,
     `; search_attempts = ${opts.search_attempts}`,
     `; attempts_used = ${attempts_used}`,
@@ -236,11 +247,12 @@ export const build_rational_evaluator = (
     return { tag: 'undeclared-vars', variables: { sentence: [...free_sent], real: [...free_real] } }
   }
 
+  const translated_c_or_re = translate_constraint_or_real_expr(evt_tt, c_or_re)
+
   // Check div0 conditions against the rational model.
-  const div0s = div0_conditions_in_constraint_or_real_expr(c_or_re)
+  const div0s = div0_conditions_in_constraint_or_real_expr(translated_c_or_re)
   for (const c of div0s) {
-    const translated = translate(evt_tt, [c])[0]!
-    const result = evaluate_constraint_rational(translated, rational_assignments)
+    const result = evaluate_constraint_rational(c, rational_assignments)
     if (result.tag !== 'ok') {
       // Fall through as if div0 — safest
       return { tag: 'div0' }
@@ -249,13 +261,40 @@ export const build_rational_evaluator = (
   }
 
   // Evaluate the expression/constraint itself.
-  const translated = translate_constraint_or_real_expr(evt_tt, c_or_re)
-  if (translated.tag === 'constraint') {
-    const result = evaluate_constraint_rational(translated.constraint, rational_assignments)
+  if (translated_c_or_re.tag === 'constraint') {
+    const result = evaluate_constraint_rational(translated_c_or_re.constraint, rational_assignments)
     if (result.tag !== 'ok') return { tag: 'div0' }  // best-effort fallback
     return { tag: 'bool-result', result: result.value }
   }
-  const result = evaluate_real_expr_rational(translated.real_expr, rational_assignments)
+  const result = evaluate_real_expr_rational(translated_c_or_re.real_expr, rational_assignments)
+  if (result.tag !== 'ok') return { tag: 'div0' }
+  return { tag: 'result', result: rational_to_model_assignment(result.value) }
+}
+
+export const build_rational_cooper_evaluator = (
+  rational_assignments: Record<number, Rational>,
+) => async (evt_tt: TruthTable, c_or_re: ConstraintOrRealExpr): Promise<FancyEvaluatorOutput> => {
+  const declared_letters = new LetterSet([...evt_tt.letters()])
+  const free_sent = free_variables_in_constraint_or_real_expr(c_or_re, new LetterSet(), declared_letters)
+  const free_real = free_real_variables_in_constraint_or_real_expr(c_or_re, new Set())
+  if (!free_sent.is_empty() || free_real.size > 0) {
+    return { tag: 'undeclared-vars', variables: { sentence: [...free_sent], real: [...free_real] } }
+  }
+
+  const translated_c_or_re = translate_constraint_or_real_expr_cooper(evt_tt, c_or_re)
+  const div0s = div0_conditions_in_constraint_or_real_expr(translated_c_or_re)
+  for (const c of div0s) {
+    const result = evaluate_constraint_rational(c, rational_assignments)
+    if (result.tag !== 'ok') return { tag: 'div0' }
+    if (result.value === false) return { tag: 'div0' }
+  }
+
+  if (translated_c_or_re.tag === 'constraint') {
+    const result = evaluate_constraint_rational(translated_c_or_re.constraint, rational_assignments)
+    if (result.tag !== 'ok') return { tag: 'div0' }
+    return { tag: 'bool-result', result: result.value }
+  }
+  const result = evaluate_real_expr_rational(translated_c_or_re.real_expr, rational_assignments)
   if (result.tag !== 'ok') return { tag: 'div0' }
   return { tag: 'result', result: rational_to_model_assignment(result.value) }
 }
@@ -418,7 +457,9 @@ export const random_pr_sat_wrapped = async (
   }
 
   const random = new Random(opts.seed)
-  const translated = translate(tt, constraints)
+  const translated = opts.semantics === 'trivalent'
+    ? translate_constraints_cooper(tt, constraints)
+    : translate(tt, constraints)
   opts.onTranslated?.(translated)
 
   const n_states = tt.n_states()
@@ -446,6 +487,7 @@ export const random_pr_sat_wrapped = async (
     constraints: output_constraints,
     smtlib_input: describe_run(opts, random.seed_string, attempts_used, solver_output.status, fmin),
     method: 'random',
+    semantics: opts.semantics,
     seed: random.seed_string,
     attempts_used,
     final_fmin: fmin,
@@ -462,8 +504,8 @@ export const random_pr_sat_wrapped = async (
 
   // Optional local Maple bridge: hand the equations to desktop Maple, then
   // search each rational solution branch (PrSAT.m's sol1[[i]] loop). Falls
-  // through to the pure-browser pipeline if the bridge is unreachable, the
-  // solve fails, or no branch certifies.
+  // through if the bridge is unreachable, the solve fails, or no branch
+  // certifies.
   if (opts.maple_bridge_url !== undefined) {
     const { equation_polys, other_conjuncts } = extract_equation_system(enriched)
     if (equation_polys.length > 0) {
@@ -478,7 +520,9 @@ export const random_pr_sat_wrapped = async (
             const result = make_result(found.attempts, {
               status: 'sat',
               state_assignments,
-              evaluate: build_rational_evaluator(found.assignments),
+              evaluate: opts.semantics === 'trivalent'
+                ? build_rational_cooper_evaluator(found.assignments)
+                : build_rational_evaluator(found.assignments),
             }, found.fmin)
             result.used_maple_bridge = true
             result.rational_model = found.assignments
@@ -495,7 +539,9 @@ export const random_pr_sat_wrapped = async (
     const result = make_result(attempt, {
       status: 'sat',
       state_assignments,
-      evaluate: build_rational_evaluator(assignments),
+      evaluate: opts.semantics === 'trivalent'
+        ? build_rational_cooper_evaluator(assignments)
+        : build_rational_evaluator(assignments),
     }, fmin)
     result.rational_model = assignments
     return result

@@ -228,6 +228,14 @@ const constraint_grammar: ConstraintMutualMap['grammar']= {
         base: 'RealExpr',
         exponent: 'RealExpr'
       },
+    },
+    ite: {
+      tag: 'record',
+      record: {
+        condition: 'Constraint',
+        then_expr: 'RealExpr',
+        else_expr: 'RealExpr'
+      },
     }
   },
   Constraint: {

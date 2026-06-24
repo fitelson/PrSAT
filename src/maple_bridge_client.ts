@@ -32,8 +32,6 @@ export const ping_maple_bridge = async (url: string = DEFAULT_MAPLE_BRIDGE_URL):
   }
 }
 
-const is_identity = (name: string, expr: string): boolean => expr.trim() === name
-
 export const solve_equations_via_maple = async (
   equation_polys: EqPoly[],
   n_states: number,
@@ -57,6 +55,7 @@ export const solve_equations_via_maple = async (
   if (body?.error !== undefined || !Array.isArray(body?.branches)) return undefined
 
   const to_index = default_var_to_index(n_states)
+  const is_identity = (name: string, expr: string): boolean => expr.trim() === name
   const branches: MapleBranch[] = []
   for (const raw of body.branches) {
     const solved = new Map<number, RealExpr>()

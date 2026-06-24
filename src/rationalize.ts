@@ -181,6 +181,11 @@ export const evaluate_real_expr_rational = (
   if (expr.tag === 'probability' || expr.tag === 'given_probability') {
     return { tag: 'error', reason: `probability term survived translation — this is a bug` }
   }
+  if (expr.tag === 'ite') {
+    const condition = evaluate_constraint_rational(expr.condition, state_values)
+    if (condition.tag !== 'ok') return condition
+    return sub(condition.value ? expr.then_expr : expr.else_expr)
+  }
   if (expr.tag === 'negative') {
     const inner = sub(expr.expr)
     if (inner.tag !== 'ok') return inner

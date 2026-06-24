@@ -115,6 +115,26 @@ export const real_expr_to_html = (expr: RealExpr, wrap_in_math_element: boolean)
       const n = math_el('mrow', {}, wrap(expr.numerator, ['state_variable_sum', 'variable', 'literal', 'probability', 'given_probability', 'negative', 'plus', 'minus', 'multiply', 'power']))
       const d = math_el('mrow', {}, wrap(expr.denominator, ['state_variable_sum', 'variable', 'literal', 'probability', 'given_probability', 'negative', 'plus', 'minus', 'multiply', 'power']))
       return math_el('mfrac', {}, n, d)
+    } else if (expr.tag === 'ite') {
+      const condition = math_el('mrow', {},
+        math_el('mtext', {}, 'if'),
+        math_el('mspace', { width: '0.4em' }),
+        constraint_to_html(expr.condition, false),
+      )
+      const otherwise = math_el('mtext', {}, 'otherwise')
+      return math_el('mrow', {},
+        math_el('mo', { fence: 'true', stretchy: 'true' }, '{'),
+        math_el('mtable', { columnalign: 'left left', rowspacing: '0.2em', columnspacing: '0.8em' },
+          math_el('mtr', {},
+            math_el('mtd', {}, sub(expr.then_expr)),
+            math_el('mtd', {}, condition),
+          ),
+          math_el('mtr', {},
+            math_el('mtd', {}, sub(expr.else_expr)),
+            math_el('mtd', {}, otherwise),
+          ),
+        ),
+      )
     } else {
       throw new Error('real_expr_to_html fallthrough')
     }

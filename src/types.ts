@@ -22,6 +22,7 @@ type RealExpr =
   | { tag: 'multiply', left: RealExpr, right: RealExpr }
   | { tag: 'divide', numerator: RealExpr, denominator: RealExpr }
   | { tag: 'power', base: RealExpr, exponent: RealExpr }
+  | { tag: 'ite', condition: Constraint, then_expr: RealExpr, else_expr: RealExpr }
 export type RealExprMap = UnionToTagMap<'tag', RealExpr>
 
 type Constraint =
@@ -221,6 +222,14 @@ export const PrSatFuncs = setup_mutual_map<PrSat>()({
       record: {
         base: "RealExpr",
         exponent: "RealExpr"
+      }
+    },
+    ite: {
+      tag: "record",
+      record: {
+        condition: "Constraint",
+        then_expr: "RealExpr",
+        else_expr: "RealExpr"
       }
     }
   },

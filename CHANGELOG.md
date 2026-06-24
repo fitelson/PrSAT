@@ -2,6 +2,31 @@
 
 > **Note:** Experimental fork of 3.0 to prototype a Random Search solver alongside Z3. Not deployed. See `RANDOM_SEARCH.md` for the design, `CLAUDE.md` for guidance.
 
+## 2026-06-23
+
+### Added: Pr3SAT / trivalent probability mode
+
+Added an experimental Pr3SAT mode for Cooper-style trivalent probability:
+
+- New semantic core in `src/cooper.ts`, with the three-valued truth table over every sentence letter and probability of `A` computed as true mass over true-plus-false mass.
+- Z3/SMT wrapper in `src/pr3_sat.ts`; the visible UI keeps the existing solver selector and adds a `Trivalent` checkbox so the same language can be read classically or trivalently.
+- The object-language conditional remains the single token `->`. In classical mode it has the material semantics; in trivalent mode it has the Cooper conditional semantics. Conditional probability `Pr(B | A)` is translated as `Pr(A -> B)` under the selected semantics.
+- Model evaluation uses the selected semantics too, so the evaluator pane reports trivalent values when `Trivalent` is checked.
+- Random Search is wired through the same semantics flag and imports the pure Cooper translator rather than the Z3-facing Pr3SAT wrapper, keeping the worker bundle independent of Z3.
+- Result rendering marks trivalent SMT results as `Pr3SAT: ->_3 / Z3` and trivalent random-search results as `Trivalent Random Search`.
+
+Verification: `npm run build`; `npx vitest --run` (687 passing, 1 skipped); focused `npx vitest --run src/random_search.spec.ts src/pr3_sat.spec.ts` (36 passing).
+
+### Decision: keep Maple as the equation solver for Random Search
+
+Revisited browser-runnable alternatives to Maple for the Random Search equation-solving phase:
+
+- Pyodide/SymPy solved toy systems but timed out on the likelihood-ratio benchmark.
+- Browser Giac/Xcas (`giac.js`) ran headlessly and solved toy equations, but returned unusable branches for the simple independence benchmark and errored on the likelihood-ratio benchmark.
+- Maple 2024/2026 solved the substantive benchmark systems quickly and returned exactly the rational-function branches the current verification pipeline consumes.
+
+So the supported equation-solving accelerator remains the optional local Maple bridge. `RANDOM_SEARCH.md` records this decision.
+
 ## 2026-06-12
 
 ### Verified: Regular mode on the independence benchmark

@@ -155,18 +155,17 @@ pipeline automatically. Files: `maple_bridge/server.mjs`,
 Both benchmark systems (likelihood-ratio, 16-state 3-wise independence) are
 handled; the deployed site remains 100% in-browser.
 
-## Future work (v3): general equation solving via an embedded CAS
+## Decision (2026-06-23): keep Maple for equation solving
 
 Why we did NOT just use a general equation-solving package (2026-06-12
-discussion):
+discussion, revisited 2026-06-23):
 
 1. **Browser constraint.** Mathematica's `Solve` (what PrSAT.m calls) is not
    embeddable. JS-native CAS libraries (nerdamer, Algebrite, mathjs) lack
    reliable multivariate polynomial *system* solving — no Gröbner machinery,
-   and the first two are semi-abandoned. The serious options are full CAS
-   builds compiled to WASM: **Giac** (what GeoGebra embeds, ~20 MB) or SymPy
-   via Pyodide (~30+ MB, slow startup) — roughly doubling the app's payload
-   for a feature only the Random Search path uses.
+   and the first two are semi-abandoned. The serious browser options are full
+   CAS builds compiled to WASM, which add a large payload for a feature only
+   the Random Search path uses.
 2. **Exact-verification constraint.** Our soundness story requires
    reconstructing pinned variables in exact rational arithmetic and verifying
    the original system exactly. General solvers return radicals / `RootOf`
@@ -179,14 +178,16 @@ discussion):
    solutions are exactly the cases for the Z3 solver in the dropdown, which
    handles algebraic numbers natively (root-obj display).
 
-**The v3 path, if concrete examples demand it:** lazy-load a Giac WASM build
-as an optional "Solve engine" — fetched only when equation elimination leaves
-unconsumed equations; ask Giac to `solve` the leftover system; keep solution
-branches that are rational functions of the free variables (discard radical /
-`RootOf` branches); feed each kept branch through the existing
-substitute/search/verify pipeline, trying branches in order like PrSAT.m's
-`sol1[[i]]` loop. Fall back to today's behavior when Giac yields nothing
-usable. Prerequisite: a maintained giac.js/WASM artifact with acceptable load
-size; evaluate GeoGebra's build. The 2026-06-12 case study (above) confirms the
-value: desktop Maple produced exactly the rational-function branch
-parameterizations this pipeline would consume.
+On 2026-06-23 we tested the realistic browser alternatives:
+
+- Pyodide/SymPy solved the toy independence equation but timed out on the
+  likelihood-ratio benchmark.
+- Giac/Xcas `giac.js` can run headlessly and solve toy equations, but it
+  returned unusable branches for the simple independence benchmark and errored
+  on the likelihood-ratio benchmark.
+- Maple 2024/2026 solved both substantive benchmark systems quickly and
+  returned the rational-function branch parameterizations this pipeline needs.
+
+So Random Search keeps the local Maple bridge as its supported equation-solving
+accelerator. The deployed site remains browser-only; the Maple bridge remains
+an optional local enhancement.
