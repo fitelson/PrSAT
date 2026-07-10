@@ -101,7 +101,7 @@ export const real_expr_to_html = (expr: RealExpr, wrap_in_math_element: boolean)
       const op = math_el('mo', {}, '-')
       return math_el('mrow', {}, op, wrap(expr.expr, ['literal', 'probability', 'given_probability', 'variable']))
     } else if (expr.tag === 'power') {
-      return math_el('msup', {}, wrap(expr.base, ['literal', 'probability', 'given_probability', 'negative', 'variable']), sub(expr.exponent))
+      return math_el('msup', {}, wrap(expr.base, ['literal', 'probability', 'given_probability', 'variable']), sub(expr.exponent))
     } else if (expr.tag === 'plus') {
       const op = math_el('mo', {}, '+')
       return math_el('mrow', {}, wrap(expr.left, ['literal', 'variable', 'probability', 'given_probability', 'negative', 'plus', 'minus', 'multiply', 'divide', 'power']), op, wrap(expr.right, ['variable', 'literal', 'probability', 'given_probability', 'negative', 'multiply', 'divide', 'power']))

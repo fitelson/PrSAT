@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest"
 
 import { Random } from "./random"
 import { assert, assert_exists } from "./utils"
-import { evaluate_constraint_2, a2eid, combine_inverse, constraint_builder, constraint_to_smtlib, constraints_to_smtlib_lines, eliminate_state_variable_index_in_svs, enrich_constraints, evaluate_real_expr, evaluate_real_expr_2, evaluate_sentence, parse_s, random_letters_and_assignments, real_expr_to_smtlib, real_expr_to_string, RealExprFuzzer, recursively_evaluate_sentence, SentenceFuzzer, state_from_index, translate, translate_constraint, translate_real_expr, TruthTable, constraint_to_string, evaluate_constraint, ConstraintFuzzer, free_real_variables_in_constraint_or_real_expr, variables_in_constraints } from "./pr_sat"
+import { evaluate_constraint_2, a2eid, combine_inverse, constraint_builder, constraint_to_smtlib, constraints_to_smtlib_lines, eliminate_state_variable_index_in_svs, enrich_constraints, evaluate_real_expr, evaluate_real_expr_2, evaluate_sentence, parse_s, random_letters_and_assignments, real_expr_to_smtlib, real_expr_to_string, RealExprFuzzer, recursively_evaluate_sentence, SentenceFuzzer, state_from_index, translate, translate_constraint, translate_real_expr, TruthTable, constraint_to_string, evaluate_constraint, ConstraintFuzzer, free_real_variables_in_constraint_or_real_expr, variables_in_constraints, MAX_ABS_SOLVER_EXPONENT, MAX_TRUTH_TABLE_LETTERS } from "./pr_sat"
 import { PrSat, PrSatFuncs as PrSatUtils, SentenceMap } from "./types"
 
 type Sentence = PrSat['Sentence']
@@ -39,6 +39,10 @@ describe('TruthTable', () => {
     const tt = make_tt([])
     // Shouldn't throw!
     tt.compute_dnf(val(true))
+  })
+  test('rejects classical truth tables large enough to freeze the browser', () => {
+    const letters = Array.from({ length: MAX_TRUTH_TABLE_LETTERS + 1 }, (_, index) => letter({ id: 'A', index: index + 1 }))
+    expect(() => make_tt(letters)).toThrow(`at most ${MAX_TRUTH_TABLE_LETTERS} distinct sentence letters`)
   })
 })
 
@@ -413,6 +417,20 @@ describe('*_to_smtlib', () => {
   })
   test('^ expands negative integer exponents', () => {
     expect(real_expr_to_smtlib({ tag: 'power', base: a, exponent: { tag: 'negative', expr: lit({ value: 2 }) } })).toEqual(['/', '1', ['*', 'a', 'a']])
+  })
+  test('^ rejects exponents large enough to exhaust the browser', () => {
+    expect(() => real_expr_to_smtlib({ tag: 'power', base: a, exponent: lit({ value: MAX_ABS_SOLVER_EXPONENT + 1 }) }))
+      .toThrow(`Exponent magnitude must be at most ${MAX_ABS_SOLVER_EXPONENT}`)
+  })
+  test('negative powers require a nonzero base', () => {
+    const tt = make_tt([])
+    const constraint = eq({ tag: 'power', base: lit({ value: 0 }), exponent: { tag: 'negative', expr: lit({ value: 1 }) } }, lit({ value: 0 }))
+    const [guarded] = enrich_constraints(tt, tt.n_states() - 1, false, [constraint]).slice(-1)
+    expect(constraint_to_smtlib(guarded)).toEqual([
+      'and',
+      ['not', ['=', '0', '0']],
+      ['=', ['/', '1', '0'], '0'],
+    ])
   })
   test('constraint conditionals stay binary', () => {
     const [p, q, r] = [eq(a, b), eq(c, d), eq(e, f)]

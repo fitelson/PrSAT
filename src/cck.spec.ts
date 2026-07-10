@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 
 import {
   CCKTruthTable,
+  MAX_CCK_TRUTH_TABLE_LETTERS,
   compute_cck_value_sets,
   evaluate_cck_sentence,
   translate_constraints_cck,
@@ -28,6 +29,13 @@ const make_cck_tt = (...letters: ReturnType<typeof S.letter>[]): CCKTruthTable =
 const parse = (s: string) => assert_result(parse_constraint(s))
 
 describe('Cantwell-Cooper-Kleene trivalent semantics', () => {
+  test('rejects CCK truth tables large enough to freeze the browser', () => {
+    const letters = Array.from(
+      { length: MAX_CCK_TRUTH_TABLE_LETTERS + 1 },
+      (_, index) => S.letter('A', index + 1),
+    )
+    expect(() => make_cck_tt(...letters)).toThrow(`at most ${MAX_CCK_TRUTH_TABLE_LETTERS} distinct sentence letters`)
+  })
   test('enumerates genuinely gappy atomic rows', () => {
     const A = S.letter('A')
     const B = S.letter('B')
@@ -109,6 +117,38 @@ describe('Cantwell-Cooper-Kleene trivalent semantics', () => {
 })
 
 describe('CCK PrSAT wrapper', () => {
+  test('negative powers with a zero base are undefined', async () => {
+    const constraints = [parse('0^(-1) = 0')]
+    const tt = new CCKTruthTable(variables_in_constraints(constraints))
+    const z3 = await init_z3()
+    const result = await cck_sat_wrapped(new WrappedSolver(z3, init_z3), tt, constraints)
+    expect(result.solver_output.status).toBe('unsat')
+  })
+
+  test('constraint evaluation preserves branch-local definedness', async () => {
+    const constraint = parse('(1 = 1) v (1 / 0 = 0)')
+    const tt = new CCKTruthTable(variables_in_constraints([constraint]))
+    const z3 = await init_z3()
+    const result = await cck_sat_wrapped(new WrappedSolver(z3, init_z3), tt, [constraint])
+    expect(result.solver_output.status).toBe('sat')
+    if (result.solver_output.status === 'sat') {
+      await expect(result.solver_output.evaluate(tt, { tag: 'constraint', constraint }))
+        .resolves.toEqual({ tag: 'bool-result', result: true })
+    }
+  })
+
+  test('model evaluation recognizes declared real variables', async () => {
+    const constraints = [parse('x = 1')]
+    const tt = new CCKTruthTable(variables_in_constraints(constraints))
+    const z3 = await init_z3()
+    const result = await cck_sat_wrapped(new WrappedSolver(z3, init_z3), tt, constraints)
+    expect(result.solver_output.status).toBe('sat')
+    if (result.solver_output.status === 'sat') {
+      await expect(result.solver_output.evaluate(tt, { tag: 'real_expr', real_expr: R.vbl('x') }))
+        .resolves.toEqual({ tag: 'result', result: { tag: 'literal', value: 1 } })
+    }
+  })
+
   test('allows both A and ~A to have totalized probability 1 on all-gappy A mass', async () => {
     const constraints = [parse('Pr(A) = 1'), parse('Pr(~A) = 1')]
     const z3 = await init_z3()

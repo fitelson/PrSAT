@@ -93,13 +93,13 @@ const parse_numeric_literal = (source: string): RealExprMap['literal'] => {
 }
 
 const ConstraintLang = P.createLanguage({
-  Constraint: (r) => right_assoc_binary(r.ConstraintFactor, r.ConstraintConnective),
-  ConstraintConnective: () => P.alt(
-    ctag_to_c_parser('biconditional').result(ciff),
-    ctag_to_c_parser('conditional').result(cimp),
-    ctag_to_c_parser('disjunction').result(cor),
-    ctag_to_c_parser('conjunction').result(cand),
-  ),
+  // Logical precedence, from tightest to loosest:
+  // negation, conjunction, disjunction, conditional, biconditional.
+  Constraint: (r) => r.CIff,
+  CIff: (r) => right_assoc_binary(r.CImp, ctag_to_c_parser('biconditional').result(ciff)),
+  CImp: (r) => right_assoc_binary(r.COr, ctag_to_c_parser('conditional').result(cimp)),
+  COr: (r) => right_assoc_binary(r.CAnd, ctag_to_c_parser('disjunction').result(cor)),
+  CAnd: (r) => right_assoc_binary(r.ConstraintFactor, ctag_to_c_parser('conjunction').result(cand)),
   ConstraintFactor: (r) => P.alt(
     r.Equal,
     r.NotEqual,
@@ -147,13 +147,11 @@ const ConstraintLang = P.createLanguage({
     ]),
   RealExpr: (r) => r.PreRealExpr.map(finish_real_expr_parse),
 
-  Sentence: (r) => right_assoc_binary(r.SentenceFactor, r.SentenceConnective),
-  SentenceConnective: () => P.alt(
-    stag_to_c_parser('biconditional').result(iff),
-    stag_to_c_parser('conditional').result(imp),
-    stag_to_c_parser('disjunction').result(or),
-    stag_to_c_parser('conjunction').result(and),
-  ),
+  Sentence: (r) => r.SIff,
+  SIff: (r) => right_assoc_binary(r.SImp, stag_to_c_parser('biconditional').result(iff)),
+  SImp: (r) => right_assoc_binary(r.SOr, stag_to_c_parser('conditional').result(imp)),
+  SOr: (r) => right_assoc_binary(r.SAnd, stag_to_c_parser('disjunction').result(or)),
+  SAnd: (r) => right_assoc_binary(r.SentenceFactor, stag_to_c_parser('conjunction').result(and)),
   SentenceFactor: (r) => P.alt(
     r.Not,
     r.WrappedSentence,

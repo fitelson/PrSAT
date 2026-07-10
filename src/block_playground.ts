@@ -13,7 +13,7 @@ import './style.css'
 
 export type InputBlock = {
   element: HTMLElement
-  set_fields: (fields: string[]) => void
+  set_fields: (fields: string[]) => Promise<void>
   set_disabled: (disabled: boolean) => void
 }
 
@@ -163,6 +163,8 @@ export const split_input = <ParseOutput extends {}>(
     } else if (state.tag === 'nothing') {
       info_button.value = INFO_MESSAGE_EMPTY
       info_button.classList.remove('error')
+    } else if (state.tag === 'pending') {
+      // Keep the prior display while the parent block is invalidated.
     } else {
       fallthrough('split_input.logic.on_state_change', state)
     }
@@ -171,7 +173,12 @@ export const split_input = <ParseOutput extends {}>(
   })
 
   textbox.addEventListener('input', debounce(DEFAULT_DEBOUNCE_MS, {
-    lead: () => output_container.classList.add('updating'),
+    lead: () => {
+      output_container.classList.add('updating')
+      void logic.mark_pending().catch((e) => {
+        throw new Error(`Unable to invalidate pending input! ${e.message}`)
+      })
+    },
     trail: () => {
       output_container.classList.remove('updating')
       logic.text.set(textbox.value)
@@ -310,7 +317,7 @@ const batch_input_block = <ParseOutput extends {}>(
   )
   return {
     element,
-    set_fields: (fields) => {
+    set_fields: async (fields) => {
       const text = fields.join('\n')
       batch_logic.text.set(text)
       textbox.value = text
@@ -419,9 +426,9 @@ export const generic_input_block = <ParseOutput extends {}>(
   )
   return {
     element,
-    set_fields: (fields) => {
-      batch_block.set_fields(fields)
-      split_block.set_fields(fields)
+    set_fields: async (fields) => {
+      await batch_block.set_fields(fields)
+      await split_block.set_fields(fields)
     },
     set_disabled: (disabled) => {
       set_disabled_for_all_children(element, disabled)

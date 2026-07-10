@@ -11,9 +11,14 @@
   <body>
     <!-- Remove if building for anything but GitHub Pages! (needed for GH Pages though) -->
     <script src="coi-serviceworker.js"></script>
-    <script src="z3-built.js"></script>
+    <script src="z3-built.js?v=4.16.0"></script>
     <script>
-      globalThis.global = { initZ3: globalThis.initZ3 };
+      const browserInitZ3 = globalThis.initZ3;
+      globalThis.global = {
+        initZ3: () => browserInitZ3({
+          locateFile: (path) => path === 'z3-built.wasm' ? `${path}?v=4.16.0` : path,
+        }),
+      };
     </script>
 
     <div id="app"></div>

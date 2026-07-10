@@ -3,6 +3,7 @@ import { constraint_builder, parse_s, real_expr_builder, sentence_builder, Truth
 import { init_z3, model_assignment_output_to_string, ModelAssignmentOutput, pr_sat, pr_sat_with_options } from './z3_integration'
 import { PrSat } from './types'
 import { S, s_to_string } from './s'
+import { assert_parse_constraint } from './parser'
 
 type Sentence = PrSat['Sentence']
 type RealExpr = PrSat['RealExpr']
@@ -26,6 +27,15 @@ const [P, Q] = [letter('P'), letter('Q')]
 describe('z3', () => {
   test('init', async () => {
     await init_z3()
+  })
+  test.each([
+    '0^(-1) = 0',
+    '0^(-1) != 0',
+    'Pr(A)^(-1) = 0 & Pr(A) = 0',
+  ])('negative powers with a zero base are undefined: %s', async (input) => {
+    const { Context } = await init_z3()
+    const result = await pr_sat(Context(`negative-power-${input.length}`), [assert_parse_constraint(input)])
+    expect(result.status).toBe('unsat')
   })
   test('general additivity', async () => {
     const { Context } = await init_z3()

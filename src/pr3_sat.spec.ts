@@ -129,6 +129,38 @@ describe('Pr3 probability translation', () => {
 })
 
 describe('Pr3SAT wrapper', () => {
+  test('negative powers with a zero base are undefined', async () => {
+    const constraints = [parse('0^(-1) = 0')]
+    const tt = new TruthTable(variables_in_constraints(constraints))
+    const z3 = await init_z3()
+    const result = await pr3_sat_wrapped(new WrappedSolver(z3, init_z3), tt, constraints)
+    expect(result.solver_output.status).toBe('unsat')
+  })
+
+  test('constraint evaluation preserves branch-local definedness', async () => {
+    const constraint = parse('(1 = 1) v (1 / 0 = 0)')
+    const tt = new TruthTable(variables_in_constraints([constraint]))
+    const z3 = await init_z3()
+    const result = await pr3_sat_wrapped(new WrappedSolver(z3, init_z3), tt, [constraint])
+    expect(result.solver_output.status).toBe('sat')
+    if (result.solver_output.status === 'sat') {
+      await expect(result.solver_output.evaluate(tt, { tag: 'constraint', constraint }))
+        .resolves.toEqual({ tag: 'bool-result', result: true })
+    }
+  })
+
+  test('model evaluation recognizes declared real variables', async () => {
+    const constraints = [parse('x = 1')]
+    const tt = new TruthTable(variables_in_constraints(constraints))
+    const z3 = await init_z3()
+    const result = await pr3_sat_wrapped(new WrappedSolver(z3, init_z3), tt, constraints)
+    expect(result.solver_output.status).toBe('sat')
+    if (result.solver_output.status === 'sat') {
+      await expect(result.solver_output.evaluate(tt, { tag: 'real_expr', real_expr: R.vbl('x') }))
+        .resolves.toEqual({ tag: 'result', result: { tag: 'literal', value: 1 } })
+    }
+  })
+
   test('solves a chameleon conjunction constraint with Cooper semantics', async () => {
     const constraints = [parse('Pr((A -> B) & C) > Pr(A -> B)')]
     const tt = new TruthTable(variables_in_constraints(constraints))

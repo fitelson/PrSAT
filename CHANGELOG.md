@@ -1,5 +1,26 @@
 # PrSAT 3.1 (Experimental) Changelog
 
+## 2026-07-10
+
+### Fixed: solver soundness and trivalent evaluation
+
+- Invalidated parsed constraints immediately when a debounced edit begins, preventing Classical, ERS, and CCK searches from using stale visible input.
+- Required nonzero bases for negative powers and capped absolute integer exponents at 1024.
+- Made model evaluation use the solver's branch-local division-definedness semantics in all three modes.
+- Made ERS and CCK evaluators recognize real variables declared by the solved constraint set.
+- Started cancellation deadlines at the abort request and bounded background Z3 reinitialization.
+- Added conventional logical precedence: negation, conjunction, disjunction, conditional, then biconditional.
+
+### Changed: resource budgets, browser gate, and caching
+
+- Added a shared 4,096-state budget: at most 12 sentence letters in Classical/ERS and 7 in CCK (2,187 three-valued rows).
+- Moved truth-table construction into the search error boundary so oversized inputs fail cleanly instead of freezing or producing an unhandled rejection.
+- Upgraded the development toolchain and made Playwright Chromium-only and serial; re-enabled the previously skipped cancellation scenarios.
+- Added browser coverage for stale edits, CCK solving/model rows, and CCK resource-limit errors, plus unit regressions for all repaired solver/evaluator paths.
+- Restricted immutable caching to content-hashed Vite assets; stable Z3 and service-worker files now revalidate, and Z3 runtime URLs carry the solver version to bypass stale hosting-cache entries.
+- Documented exponent, precedence, and semantic-mode resource limits and corrected negative-base MathML grouping.
+- Verification: `npm run lint`, `npm run build`, and `npm test` pass (622 unit tests and all 23 Chromium tests). `npm audit` reports 0 vulnerabilities.
+
 ## 2026-06-24
 
 ### Changed: public-facing Z3 decision-procedure branch

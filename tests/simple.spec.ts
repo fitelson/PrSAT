@@ -3,7 +3,7 @@ import * as TestId from './test_ids'
 import * as Constants from '../src/constants'
 import { fallthrough } from '../src/utils'
 
-const URL = 'http://localhost:5173/'
+const URL = 'http://127.0.0.1:5173/'
 const DEFAULT_TIMEOUT = 20_000
 
 const to_load = async (page: Page): Promise<void> => {
@@ -11,23 +11,19 @@ const to_load = async (page: Page): Promise<void> => {
   await expect(page.getByTestId(TestId.z3_status)).toBeEmpty({ timeout: DEFAULT_TIMEOUT })
 }
 
-const expect_state_display = async (page: Page, text: string, timeout_ms?: number): Promise<void> => {
-  const state_display = page.getByTestId(TestId.state_display_id)
-  await expect(state_display).toContainText(text, { timeout: timeout_ms })
-}
-
 const find_model = async (page: Page, with_result: 'sat' | 'unsat' | 'unknown' | 'cancelled', timeout_ms?: number) => {
   const state_display = page.getByTestId(TestId.state_display_id)
+  const result_timeout = timeout_ms ?? DEFAULT_TIMEOUT
   await page.getByTestId(TestId.find_model).click()
   // Right after we click, we want to be searching!
   await state_display.getByText(Constants.SEARCH).isVisible()
 
   if (with_result === 'sat') {
-    await expect(state_display).toContainText(Constants.SAT, { timeout: timeout_ms })
+    await expect(state_display).toContainText(Constants.SAT, { timeout: result_timeout })
   } else if (with_result === 'unsat') {
-    await expect(state_display).toContainText(Constants.UNSAT, { timeout: timeout_ms })
+    await expect(state_display).toContainText(Constants.UNSAT, { timeout: result_timeout })
   } else if (with_result === 'unknown') {
-    await expect(state_display).toContainText(Constants.UNKNOWN, { timeout: timeout_ms })
+    await expect(state_display).toContainText(Constants.UNKNOWN, { timeout: result_timeout })
   } else if (with_result === 'cancelled') {
     // expect(state_display).toContainText(Constants.CANCELLED)
   } else {
@@ -63,6 +59,7 @@ test('trivalent toggle runs through Z3', async ({ page }) => {
   await single_input.getByTestId(test_ids.split.input).fill('Pr((A -> B) & C) > Pr(A -> B)')
 
   await page.getByTestId(TestId.solver_method.trivalent_toggle).check()
+  await expect(page.getByTestId(TestId.find_model)).toBeEnabled({ timeout: DEFAULT_TIMEOUT })
 
   await page.getByTestId(TestId.find_model).click()
   await expect(page.getByText(Constants.SAT)).toBeVisible({ timeout: DEFAULT_TIMEOUT })
@@ -71,6 +68,31 @@ test('trivalent toggle runs through Z3', async ({ page }) => {
   await expect(badge).toBeVisible()
   await expect(badge).toContainText('Pr3SAT')
   await expect(badge).toContainText('ERS')
+})
+
+test('CCK toggle runs through Z3 with genuinely gappy rows', async ({ page }) => {
+  await to_load(page)
+  const test_ids = TestId.generic_multi_input('constraints')
+  const single_input = page.getByTestId(test_ids.split.single.get(0))
+  await single_input.getByTestId(test_ids.split.input).fill('Pr(A) = 1 & Pr(~A) = 1')
+  await page.getByTestId(TestId.solver_method.trivalent_cck_toggle).check()
+  await expect(page.getByTestId(TestId.find_model)).toBeEnabled({ timeout: DEFAULT_TIMEOUT })
+  await find_model(page, 'sat')
+
+  const badge = page.getByTestId(TestId.solver_method.badge)
+  await expect(badge).toContainText('CCK')
+  await expect(page.getByTestId(TestId.model_table).locator('tbody tr')).toHaveCount(3)
+})
+
+test('CCK state budget fails cleanly instead of freezing', async ({ page }) => {
+  await to_load(page)
+  const test_ids = TestId.generic_multi_input('constraints')
+  const single_input = page.getByTestId(test_ids.split.single.get(0))
+  await single_input.getByTestId(test_ids.split.input).fill('Pr(A v B v C v D v E v F v G v H) = 1')
+  await page.getByTestId(TestId.solver_method.trivalent_cck_toggle).check()
+  await expect(page.getByTestId(TestId.find_model)).toBeEnabled({ timeout: DEFAULT_TIMEOUT })
+  await page.getByTestId(TestId.find_model).click()
+  await expect(page.getByTestId(TestId.state_display_id)).toContainText('CCK mode supports at most 7 distinct sentence letters')
 })
 
 test('arithmetic-only constraints do not show a probability table', async ({ page }) => {
@@ -162,7 +184,7 @@ test('weird model', async ({ page }) => {
   const single_inputs: Locator[] = []
   const test_ids = TestId.generic_multi_input('constraints')
 
-  page.getByTestId(TestId.regular_toggle).check()
+  await page.getByTestId(TestId.regular_toggle).check()
 
   single_inputs.push(page.getByTestId(test_ids.split.single.get(0)))
   await expect(single_inputs[0]).toBeVisible()
@@ -234,6 +256,18 @@ const set_block_input = async (page: Page, test_ids: TestId.GenericMultiInputTes
     await toggle_button.click()
   }
 }
+
+test('pending edits cannot solve a stale constraint set', async ({ page }) => {
+  await to_load(page)
+  const test_ids = TestId.generic_multi_input('constraints')
+  await set_block_input(page, test_ids, ['1 = 1', '2 = 2'])
+
+  const first_input = page.getByTestId(test_ids.split.single.get(0)).getByTestId(test_ids.split.input)
+  await first_input.fill('1 = 2')
+  await expect(page.getByTestId(TestId.find_model)).toBeDisabled()
+  await expect(page.getByTestId(TestId.find_model)).toBeEnabled({ timeout: DEFAULT_TIMEOUT })
+  await find_model(page, 'unsat')
+})
 
 test('parse from batch input', async ({ page }) => {
   await to_load(page)
@@ -316,13 +350,13 @@ const SUPER_LONG_SOLVE: string[] = [
 ]
 const SHORT_WAIT_MS = 50
 
-test.skip('cancelling shows cancel message', async ({ page }) => {
+test('cancelling shows cancel message', async ({ page }) => {
   await to_load(page)
 
   const constraint_test_ids = TestId.generic_multi_input('constraints')
   await set_block_input(page, constraint_test_ids, LONGISH_SOLVE)
 
-  find_model(page, 'cancelled').catch((e) => { throw e })
+  void find_model(page, 'cancelled').catch((e) => { throw e })
   await page.waitForTimeout(SHORT_WAIT_MS)
   await cancel_solve(page, 20 * 1000)
 })
@@ -349,7 +383,7 @@ const get_multi_input_block = (page: Page, test_ids: TestId.GenericMultiInputTes
   const block = page.getByTestId(test_ids.id)
   const batch = block.getByTestId(test_ids.batch.id)
   const batch_textbox = block.getByTestId(test_ids.batch.textbox)
-  const batch_parse_button = block.getByTestId(test_ids.batch.textbox)
+  const batch_parse_button = block.getByTestId(test_ids.batch.parse)
   const split_inputs: SplitInputLocators[] = []
 
   // Won't always work starting from zero, so check difference in actual test-id index and expected input_index if the element appears missing.
@@ -405,21 +439,21 @@ test('disable all input elements during solve', async ({ page }) => {
   const constraint_input_array = LONGISH_SOLVE
   await set_block_input(page, constraint_test_ids, constraint_input_array)
 
-  find_model(page, 'cancelled').catch((e) => { throw e })
+  void find_model(page, 'cancelled').catch((e) => { throw e })
   await page.waitForTimeout(SHORT_WAIT_MS)
 
   const constraint_block = get_multi_input_block(page, constraint_test_ids, 0, constraint_input_array.length)
   await expect_multi_input_block_disabled(constraint_block, true)
 })
 
-test.skip('re-enable all input elements on cancel', async ({ page }) => {
+test('re-enable all input elements on cancel', async ({ page }) => {
   await to_load(page)
 
   const constraint_test_ids = TestId.generic_multi_input('constraints')
   const constraint_input_array = LONGISH_SOLVE
   await set_block_input(page, constraint_test_ids, constraint_input_array)
 
-  find_model(page, 'cancelled').catch((e) => { throw e })
+  void find_model(page, 'cancelled').catch((e) => { throw e })
   await page.waitForTimeout(SHORT_WAIT_MS)
   await cancel_solve(page, Constants.CANCEL_OVERRIDE_TIMEOUT_MS + 10 * 1000)  // Boooo!
 
@@ -439,16 +473,16 @@ test('re-enable all input elements on solve', async ({ page }) => {
   await expect_multi_input_block_disabled(constraint_block, false)
 })
 
-test.skip('cancel takes at most a few seconds on long solves', { tag: '@slow' }, async ({ page }) => {
-  test.setTimeout(2 * 1000 * 60)  // 2 minutes to account for the long waits.
+test('cancel takes at most a few seconds on long solves', { tag: '@slow' }, async ({ page }) => {
+  test.setTimeout(30 * 1000)
   await to_load(page)
 
   const constraint_test_ids = TestId.generic_multi_input('constraints')
   const constraint_input_array = SUPER_LONG_SOLVE
   await set_block_input(page, constraint_test_ids, constraint_input_array)
 
-  find_model(page, 'cancelled').catch((e) => { throw e })
-  await page.waitForTimeout(1.5 * 1000 * 60)  // I'm not going to want to run this test every time, but this should ensure the cancel takes forever.
+  void find_model(page, 'cancelled').catch((e) => { throw e })
+  await page.waitForTimeout(SHORT_WAIT_MS)
 
   await cancel_solve(page, Constants.CANCEL_OVERRIDE_TIMEOUT_MS + 2000)  // booooooo
 })

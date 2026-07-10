@@ -980,7 +980,7 @@ const display_constraint_or_real_expr = (e: ConstraintOrRealExpr, wrap_in_math_e
 type ModelEvaluator = {
   element: HTMLElement
   // multi_input: MultiInput<ConstraintOrRealExpr>
-  refresh: () => void
+  refresh: () => Promise<void>
 }
 
 // Numeric value of a model assignment, for decimal display. Undefined when no
@@ -1109,7 +1109,7 @@ const model_evaluators = (
 
   show_decimals.watch((decimals) => {
     decimals_button.value = decimals ? 'Fractions' : 'Decimals'
-    refresh().catch((e) => { console.error('decimals toggle refresh failed', e) })
+    void refresh().catch((e) => { console.error('decimals toggle refresh failed', e) })
   })
 
   const element = el('div', { class: 'model-evaluators' },
@@ -1433,10 +1433,10 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
   }
 
   const z3_is_ready_2 = (solver: WrappedSolver) => {
-    generate_button.addEventListener('click', async () => {
+    generate_button.addEventListener('click', () => {
       assert(state2.get().tag !== 'looking', 'Trying to generate another model while looking for stuff!')
       const constraints = assert_exists(constraint_block.get_output(), 'Generate button clicked but not all constraints ready!')
-      await start_search_solver(solver, constraints, is_regular.get())
+      void start_search_solver(solver, constraints, is_regular.get())
     })
     cancel_button.onclick = () => {
       const state = state2.get()
@@ -1503,14 +1503,13 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
 
   const start_search_solver = async (solver: WrappedSolver, constraints: Constraint[], is_regular: boolean): Promise<void> => {
     const semantic_mode = probability_semantics.get()
-    const truth_table = semantic_mode === 'trivalent-cck'
-      ? new CCKTruthTable(variables_in_constraints(constraints))
-      : new TruthTable(variables_in_constraints(constraints))
-    // state.set({ tag: 'looking', truth_table })
-    const abort_controller = new AbortController()
-    state2.set({ tag: 'looking', truth_table, abort_controller })
-    model_container.innerHTML = ''
     try {
+      const truth_table = semantic_mode === 'trivalent-cck'
+        ? new CCKTruthTable(variables_in_constraints(constraints))
+        : new TruthTable(variables_in_constraints(constraints))
+      const abort_controller = new AbortController()
+      state2.set({ tag: 'looking', truth_table, abort_controller })
+      model_container.innerHTML = ''
       if (has_probability_table(truth_table)) {
         model_container.appendChild(truth_table_display(truth_table))
       }
@@ -1670,7 +1669,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
         if (has_probability_table(state.truth_table)) {
           model_assignments2.set({ truth_table: state.truth_table, values: state.solver_output.solver_output.state_assignments })
           // evaluators.multi_input.refresh()
-          evaluators.refresh()
+          void evaluators.refresh().catch((error) => console.error('Unable to refresh model evaluators', error))
         } else {
           model_assignments2.set(undefined)
         }
@@ -1679,7 +1678,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
       }
     } else if (last_state?.tag !== 'looking' && state.tag === 'looking') {
       start_countdown(timeout_ms.get() / 1000, () => { cancel(state.abort_controller) })
-      evaluators.refresh()
+      void evaluators.refresh().catch((error) => console.error('Unable to refresh model evaluators', error))
     }
     if (last_state?.tag === 'looking' && state.tag !== 'looking') {
       cancel_countdown()
@@ -1705,7 +1704,8 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
       model_part.classList.add('invalidated')
       model_container.innerHTML = ''
       constraints_view.innerHTML = ''
-      generate_button.disabled = false
+      const constraints = constraint_block.get_output()
+      generate_button.disabled = constraints === undefined || constraints.length === 0
     } else if (state.tag === 'looking') {
       state_display.innerHTML = ''
       state_display.append(Constants.SEARCH)
