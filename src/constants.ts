@@ -32,7 +32,7 @@ To insert a [RealExpr], type in one of:
 - '[RealExpr] - [RealExpr]' for subtraction,
 - '[RealExpr] * [RealExpr]' for multiplication,
 - '[RealExpr] / [RealExpr]' for division,
-- '[RealExpr]^[RealExpr]' for exponentiation.
+- '[RealExpr]^[IntegerLiteral]' for exponentiation (absolute exponent at most 1024; a negative exponent requires a nonzero base).
 
 To insert a [Sentence], type in one of:
 - '⊤' or 'true' for truth (hint: the ⊤ is read as 'top', not 'tee'),
@@ -43,6 +43,8 @@ To insert a [Sentence], type in one of:
 - '[Sentence] & [Sentence]' or '[Sentence] /\\ [Sentence]' for conjunction,
 - '[Sentence] → [Sentence]', '[Sentence] -> [Sentence]', or '[Sentence] > [Sentence]' for conditional,
 - '[Sentence] ↔ [Sentence]', '[Sentence] <-> [Sentence]', or '[Sentence] <> [Sentence]' for biconditional.
+
+Logical precedence (tightest to loosest) is negation, conjunction, disjunction, conditional, then biconditional. Parentheses override precedence.
 `.trim()
 export const CONSTRAINT_OR_REAL_EXPR_INPUT_INSTRUCTIONS = `
 You can either insert a Constraint or a Real Expression.

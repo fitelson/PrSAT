@@ -1,6 +1,6 @@
 import { Arith, Bool, Context, Expr, init, Model, Z3HighLevel, Z3LowLevel } from "z3-solver"
 import { match_s, S, spv, clause, s_to_string, default_clause } from "./s"
-import { constraints_to_smtlib_lines, eliminate_state_variable_index, enrich_constraints, parse_s, real_expr_to_smtlib, translate, TruthTable, variables_in_constraints, state_index_id, constraint_to_smtlib, translate_constraint, translate_real_expr, free_variables_in_constraint_or_real_expr as free_sentence_variables_in_constraint_or_real_expr, LetterSet, free_real_variables_in_constraint_or_real_expr, VariableLists, div0_conditions_in_constraint_or_real_expr, translate_constraint_or_real_expr, eliminate_state_variable_index_in_constraint_or_real_expr } from "./pr_sat"
+import { constraints_to_smtlib_lines, eliminate_state_variable_index, enrich_constraints, parse_s, real_expr_to_smtlib, translate, TruthTable, variables_in_constraints, state_index_id, constraint_to_smtlib, translate_constraint, translate_real_expr, free_variables_in_constraint_or_real_expr as free_sentence_variables_in_constraint_or_real_expr, LetterSet, free_real_variables_in_constraint_or_real_expr, VariableLists, div0_conditions_in_constraint_or_real_expr, translate_constraint_or_real_expr, eliminate_state_variable_index_in_constraint_or_real_expr, guard_div0_conditions_in_constraint, MAX_ABS_SOLVER_EXPONENT } from "./pr_sat"
 import { ConstraintOrRealExpr, PrSat } from "./types"
 import { as_array, assert, assert_exists, assert_result, fallthrough, Res, sleep } from "./utils"
 
@@ -144,8 +144,25 @@ export const fancy_evaluate_constraint_or_real_expr = async <CtxKey extends stri
     return { tag: 'undeclared-vars', variables: { sentence: [...free_sentence_vars], real: [...free_real_vars] } }
   }
 
-  const div0_constraints = div0_conditions_in_constraint_or_real_expr(c_or_re)
   const index_to_eliminate = tt.n_states() - 1  // TODO: put this in a function.
+
+  if (c_or_re.tag === 'constraint') {
+    // Use the same branch-local definedness transformation as the solver.
+    // A global denominator precheck incorrectly makes a true disjunction such
+    // as `true v undefined` evaluate as division-by-zero.
+    const translated = translate_constraint(tt, c_or_re.constraint)
+    const guarded = guard_div0_conditions_in_constraint(translated)
+    const [_, eliminated] = eliminate_state_variable_index_in_constraint_or_real_expr(
+      tt.n_states(),
+      index_to_eliminate,
+      { tag: 'constraint', constraint: guarded },
+    )
+    if (eliminated.tag !== 'constraint') throw new Error('Expected constraint after elimination')
+    const result = model.eval(constraint_to_bool(ctx, model, eliminated.constraint), true)
+    return { tag: 'bool-result', result: result.sexpr() === 'true' }
+  }
+
+  const div0_constraints = div0_conditions_in_constraint_or_real_expr(c_or_re)
   for (const c of div0_constraints) {
     const translated = translate_constraint(tt, c)
     const [_, eliminated] = eliminate_state_variable_index_in_constraint_or_real_expr(tt.n_states(), index_to_eliminate, { tag: 'constraint', constraint: translated })
@@ -161,12 +178,6 @@ export const fancy_evaluate_constraint_or_real_expr = async <CtxKey extends stri
   const translated_c_or_re = translate_constraint_or_real_expr(tt, c_or_re)
   const [_, eliminated] = eliminate_state_variable_index_in_constraint_or_real_expr(tt.n_states(), index_to_eliminate, translated_c_or_re)
   const to_evaluate_z3 = constraint_or_real_expr_to_z3_expr(ctx, model, eliminated)
-  if (c_or_re.tag === 'constraint') {
-    const result = model.eval(to_evaluate_z3, true)
-    const s = result.sexpr()
-    return { tag: 'bool-result', result: s === 'true' }
-  }
-
   const output = await expr_to_assignment(ctx, model, to_evaluate_z3)
   console.log('RESULT', output)
 
@@ -571,6 +582,9 @@ export const real_expr_to_arith = <CtxKey extends string>(ctx: Context<CtxKey>, 
     if (exp === undefined) {
       throw new Error('Model evaluator exponentiation requires an integer literal exponent.')
     }
+    if (Math.abs(exp) > MAX_ABS_SOLVER_EXPONENT) {
+      throw new Error(`Exponent magnitude must be at most ${MAX_ABS_SOLVER_EXPONENT}; received ${exp}.`)
+    }
     const base = sub(expr.base)
     const product = (count: number): Arith<CtxKey> => {
       if (count === 0) {
@@ -838,12 +852,12 @@ export const run_solve_cancel_logic = async <R>(
   if (result.tag === 'finished') {
     return result.result
   } else if (result.tag === 'cancelled') {
-    const cancel_result = await on_cancel()
+    const cancel_result = on_cancel()
     const result = await Promise.race([
-      // If we're at this point, just assume that the run finishes BECAUSE it was cancelled.
-      // Ignore the result, though, as it's (best-case) garbage.
-      run.then(() => ({ tag: 'finished' as const, result: cancel_result })),
-      // on_cancel().then((r) => ({ tag: 'finished' as const, result: r })),
+      // A fast cancel requires both the interrupted run and cancellation
+      // cleanup to finish. The timeout starts when cancellation starts, not
+      // after cleanup has already completed.
+      Promise.all([run, cancel_result]).then(([, r]) => ({ tag: 'finished' as const, result: r })),
       sleep(cancel_timeout_ms).then(() => ({ tag: 'cancelled' as const })),
     ])
 
@@ -860,14 +874,29 @@ export const run_solve_cancel_logic = async <R>(
 }
 
 export class WrappedSolver {
+  private reinitialize_in_flight: Promise<void> | undefined
+
   constructor(private z3_interface: (Z3HighLevel & Z3LowLevel) | undefined, private readonly init: () => Promise<(Z3HighLevel & Z3LowLevel) | undefined>) {
   }
 
   private async reinitialize(): Promise<void> {
-    const old = this.z3_interface
+    if (this.reinitialize_in_flight !== undefined) {
+      return await this.reinitialize_in_flight
+    }
 
-    this.z3_interface = await this.init()
-    console.log('reinitialized?', old !== this.z3_interface)
+    const pending = (async () => {
+      const old = this.z3_interface
+      this.z3_interface = await this.init()
+      console.log('reinitialized?', old !== this.z3_interface)
+    })()
+    this.reinitialize_in_flight = pending
+    try {
+      await pending
+    } finally {
+      if (this.reinitialize_in_flight === pending) {
+        this.reinitialize_in_flight = undefined
+      }
+    }
   }
 
   // async solve(smtlib_lines: S[], abort_signal?: AbortSignal, cancel_fallback?: () => Promise<undefined>): Promise<WrappedSolverResult> {
@@ -936,7 +965,11 @@ export class WrappedSolver {
       async () => {  // on_slow_cancel
         console.log('attempting slow cancel...')
         await cancel_fallback?.()
-        await this.reinitialize()
+        // The in-flight reinitialization keeps the UI in its loading state.
+        // Do not make the cancellation result wait indefinitely for it.
+        void this.reinitialize().catch((error) => {
+          console.error('Z3 reinitialization failed after cancellation', error)
+        })
         return { status: 'cancelled' }
       },
       2 * 2000,  // two seconds before slow_cancel

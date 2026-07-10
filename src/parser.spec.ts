@@ -49,6 +49,10 @@ describe('parse', () => {
     test_right_assoc('∨', or)
     test_right_assoc('→', imp)
     test_right_assoc('↔', iff)
+    test_parse('A & B ∨ C', or(and(A, B), C))
+    test_parse('A ∨ B & C', or(A, and(B, C)))
+    test_parse('A ∨ B → C & D', imp(or(A, B), and(C, D)))
+    test_parse('A → B ↔ C', iff(imp(A, B), C))
   })
   describe('RealExpr', () => {
     const parse = assert_parse_real_expr
@@ -119,6 +123,10 @@ describe('parse', () => {
     test_right_assoc('∨', cor)
     test_right_assoc('→', cimp)
     test_right_assoc('↔', ciff)
+    const [c1, c2, c3, c4] = [eq(lit(1), lit(1)), eq(lit(2), lit(2)), eq(lit(3), lit(3)), eq(lit(4), lit(4))]
+    test_parse('1 = 1 & 2 = 2 ∨ 3 = 3', cor(cand(c1, c2), c3))
+    test_parse('1 = 1 ∨ 2 = 2 & 3 = 3', cor(c1, cand(c2, c3)))
+    test_parse('1 = 1 ∨ 2 = 2 → 3 = 3 & 4 = 4', cimp(cor(c1, c2), cand(c3, c4)))
   })
 
   // const random = new Random()

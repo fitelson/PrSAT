@@ -14,10 +14,17 @@ AddType application/wasm .wasm
     </Files>
 </IfModule>
 
-# Cache hashed build assets aggressively; keep HTML fresh so deployments are picked up.
-<FilesMatch "\.(js|css|wasm)$">
+# Cache only Vite's content-hashed assets aggressively.
+<FilesMatch "^index-[A-Za-z0-9_-]+\.(js|css)$">
     <IfModule mod_headers.c>
         Header set Cache-Control "public, max-age=31536000, immutable"
+    </IfModule>
+</FilesMatch>
+
+# These runtime assets have stable filenames and must be revalidated after an upgrade.
+<FilesMatch "^(z3-built\.(js|wasm)|coi-serviceworker\.js)$">
+    <IfModule mod_headers.c>
+        Header set Cache-Control "no-cache"
     </IfModule>
 </FilesMatch>
 

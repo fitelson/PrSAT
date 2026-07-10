@@ -108,6 +108,9 @@ export class LetterSet {
   }
 }
 
+export const MAX_TRUTH_TABLE_LETTERS = 12
+export const MAX_ABS_SOLVER_EXPONENT = 1024
+
 export class TruthTable {
   private readonly letter_ids: SentenceMap['letter'][]
   // private readonly state_table: { assignment: Record<string, boolean>, state: Sentence }[]
@@ -118,6 +121,9 @@ export class TruthTable {
 
   constructor(readonly variables: Readonly<VariableLists>) {
     this.letter_ids = [...new LetterSet(variables.sentence)].sort(comp_letters)
+    if (this.letter_ids.length > MAX_TRUTH_TABLE_LETTERS) {
+      throw new Error(`At most ${MAX_TRUTH_TABLE_LETTERS} distinct sentence letters are supported; received ${this.letter_ids.length}.`)
+    }
     this.state_table = TruthTable.enumerate_states(this.letter_ids)
   }
 
@@ -745,6 +751,15 @@ export const div0_conditions_in_constraint_or_real_expr = (c_or_re: ConstraintOr
   }
 }
 
+const signed_integer_literal_value = (expr: RealExpr): number | undefined => {
+  if (expr.tag === 'literal' && Number.isSafeInteger(expr.value)) {
+    return expr.value
+  } else if (expr.tag === 'negative' && expr.expr.tag === 'literal' && Number.isSafeInteger(expr.expr.value)) {
+    return -expr.expr.value
+  }
+  return undefined
+}
+
 export const div0_conditions_in_single_constraint = (c: Constraint): Constraint[] => {
   if (c.tag === 'equal') {
     return [...div0_conditions_in_real_expr(c.left), ...div0_conditions_in_real_expr(c.right)]
@@ -788,8 +803,13 @@ export const div0_conditions_in_real_expr = (expr: RealExpr): Constraint[] => {
     return []
   } else if (expr.tag === 'negative') {
     return div0_conditions_in_real_expr(expr.expr)
-  } else if (expr.tag === 'power') { 
-    return div0_conditions_in_real_expr(expr.base)
+  } else if (expr.tag === 'power') {
+    const exponent = signed_integer_literal_value(expr.exponent)
+    return [
+      ...(exponent !== undefined && exponent < 0 ? [cnot(eq(expr.base, lit(0)))] : []),
+      ...div0_conditions_in_real_expr(expr.base),
+      ...div0_conditions_in_real_expr(expr.exponent),
+    ]
   } else if (expr.tag === 'plus') {
     return [...div0_conditions_in_real_expr(expr.left), ...div0_conditions_in_real_expr(expr.right)]
   } else if (expr.tag === 'minus') {
@@ -843,7 +863,7 @@ const div0_definedness_in_constraint = (constraint: Constraint): Constraint[] =>
   }
 }
 
-const guard_div0_conditions_in_constraint = (constraint: Constraint): Constraint => {
+export const guard_div0_conditions_in_constraint = (constraint: Constraint): Constraint => {
   const sub = guard_div0_conditions_in_constraint
   if (
     constraint.tag === 'equal' ||
@@ -1341,13 +1361,6 @@ export const real_expr_to_smtlib = (expr: RealExpr): S => {
     return [real_expr_to_smtlib(expr)]
   }
 
-  const literal_integer_value = (literal: RealExprMap['literal']): number | undefined => {
-    if (!Number.isSafeInteger(literal.value)) {
-      return undefined
-    }
-    return literal.value
-  }
-
   const power_to_smtlib = (base: RealExpr, exponent: RealExpr): S => {
     const base_s = real_expr_to_smtlib(base)
     const product = (factors: S[]): S => {
@@ -1360,16 +1373,13 @@ export const real_expr_to_smtlib = (expr: RealExpr): S => {
       }
     }
 
-    let exp: number | undefined
-    if (exponent.tag === 'literal') {
-      exp = literal_integer_value(exponent)
-    } else if (exponent.tag === 'negative' && exponent.expr.tag === 'literal') {
-      const positive = literal_integer_value(exponent.expr)
-      exp = positive === undefined ? undefined : -positive
-    }
+    const exp = signed_integer_literal_value(exponent)
 
     if (exp === undefined) {
       throw new Error('Exponentiation in solver input requires an integer literal exponent.')
+    }
+    if (Math.abs(exp) > MAX_ABS_SOLVER_EXPONENT) {
+      throw new Error(`Exponent magnitude must be at most ${MAX_ABS_SOLVER_EXPONENT}; received ${exp}.`)
     }
     if (exp < 0) {
       return ['/', '1', product(Array.from({ length: -exp }, () => base_s))]

@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'vitest'
 import { assert_parse_constraint } from './parser'
-import { init_z3, pr_sat } from './z3_integration'
+import { fancy_evaluate_constraint_or_real_expr, init_z3, pr_sat } from './z3_integration'
 
 describe('compound metalinguistic constraints', () => {
   // Theorem: (1) & (2) IFF (3)
@@ -24,4 +24,21 @@ describe('compound metalinguistic constraints', () => {
     const result = await pr_sat(ctx, [negated])
     expect(result.status).toBe('unsat')
   }, 60_000)
+
+  test('model evaluator uses the solver\'s branch-local definedness semantics', async () => {
+    const constraint = assert_parse_constraint('(1 = 1) v (Pr(A | false) = 0)')
+    const z3 = await init_z3()
+    const ctx = z3.Context('definedness')
+    const solved = await pr_sat(ctx, [constraint])
+    expect(solved.status).toBe('sat')
+    if (solved.status !== 'sat') return
+
+    const evaluated = await fancy_evaluate_constraint_or_real_expr(
+      ctx,
+      solved.z3_model,
+      solved.tt,
+      { tag: 'constraint', constraint },
+    )
+    expect(evaluated).toEqual({ tag: 'bool-result', result: true })
+  })
 })

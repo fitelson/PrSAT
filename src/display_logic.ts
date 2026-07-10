@@ -1,7 +1,7 @@
 import { AsyncEditable, AsyncWatcher, Editable, EditableDLL, Watcher, WatchGroup } from "./editable"
 import { TruthTable } from "./pr_sat"
 import { PrSat } from "./types"
-import { assert_exists, fallthrough, Res } from "./utils"
+import { assert_exists, Res } from "./utils"
 import { ModelAssignmentOutput } from "./z3_integration"
 
 type Constraint = PrSat['Constraint']
@@ -18,6 +18,7 @@ type ModelResult =
 
 type SingleInputState<ParseOutput extends {}> =
   | { tag: 'nothing' }
+  | { tag: 'pending' }
   | { tag: 'parsed', output: ParseOutput }
   | { tag: 'error', message: string }
 
@@ -63,6 +64,13 @@ export class SingleInputLogic<ParseOutput extends {}, Associate = undefined> {
 
   get_output(): SingleInputState<ParseOutput> {
     return this.output.get()
+  }
+
+  // The DOM textbox is debounced, so its visible value can be newer than
+  // `text`. Invalidate the parsed output immediately on the leading edge to
+  // prevent callers from solving a stale constraint set during that window.
+  async mark_pending(): Promise<void> {
+    await this.output.set({ tag: 'pending' })
   }
 
   on_focus(f: (is_focused: boolean) => undefined): Watcher<unknown> {
@@ -123,39 +131,36 @@ export class InputBlockLogic<ParseOutput extends {}, Associate = undefined> {
       input.on_state_change(async (input_state, last_state) => {
         if (last_state === undefined) {
           throw new Error('SingleInputLogic updates from undefined!')
-        } else if (last_state.tag === 'nothing') {
-          if (input_state.tag === 'nothing') {
-            // diagonal.
-          } else if (input_state.tag === 'error') {
-            this.outputs.set(undefined)
-          } else if (input_state.tag === 'parsed') {
-            this.update_outputs()
-          } else {
-            return fallthrough('InputBlockLogic.constructor input.on_state_change last_state', input_state)
-          }
-        } else if (last_state.tag === 'error') {
-          if (input_state.tag === 'nothing') {
-            this.update_outputs()
-          } else if (input_state.tag === 'error') {
-            // diagonal.
-          } else if (input_state.tag === 'parsed') {
-            this.update_outputs()
-          } else {
-            return fallthrough('InputBlockLogic.constructor input.on_state_change last_state', input_state)
-          }
-        } else if (last_state.tag === 'parsed') {
-          if (input_state.tag === 'nothing') {
-            this.update_outputs()
-          } else if (input_state.tag === 'error') {
-            this.outputs.set(undefined)
-          } else if (input_state.tag === 'parsed') {
-            // Might parse to something different, so we want to update here, too!
-            this.update_outputs()
-          } else {
-            return fallthrough('InputBlockLogic.constructor input.on_state_change last_state', input_state)
-          }
-        } else {
-          return fallthrough('InputBlockLogic.constructor input.on_state_change', last_state)
+        }
+
+        // Preserve the original notification semantics (in particular,
+        // nothing -> error emits an undefined output) while treating pending
+        // as an immediate invalidation state for debounced DOM edits.
+        switch (last_state.tag) {
+          case 'nothing':
+            if (input_state.tag === 'error' || input_state.tag === 'pending') {
+              this.outputs.set(undefined)
+            } else if (input_state.tag === 'parsed') {
+              this.update_outputs()
+            }
+            break
+          case 'error':
+            if (input_state.tag === 'nothing' || input_state.tag === 'parsed') {
+              this.update_outputs()
+            }
+            break
+          case 'parsed':
+            if (input_state.tag === 'error' || input_state.tag === 'pending') {
+              this.outputs.set(undefined)
+            } else {
+              this.update_outputs()
+            }
+            break
+          case 'pending':
+            if (input_state.tag === 'nothing' || input_state.tag === 'parsed') {
+              this.update_outputs()
+            }
+            break
         }
       })
 
@@ -200,7 +205,7 @@ export class InputBlockLogic<ParseOutput extends {}, Associate = undefined> {
     for (const input of this.inputs) {
       const output = input.get_output()
       // assert(output.tag !== 'error', 'Trying to update outputs to list even though there\'s an error!')
-      if (output.tag === 'error') {
+      if (output.tag === 'error' || output.tag === 'pending') {
         this.set_outputs(undefined)
         return
       } else if (output.tag === 'parsed') {

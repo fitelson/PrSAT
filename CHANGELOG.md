@@ -2,6 +2,27 @@
 
 > **Note:** This is a local build for deployment to fitelson.org.
 
+## 2026-07-10
+
+### Fixed: Solver Soundness, Input Races, and Evaluation
+
+- Invalidated parsed constraints as soon as a debounced textbox edit begins, so Find Model can never solve a stale constraint set that no longer matches the visible input.
+- Added the missing nonzero-base guard for negative integer powers, including powers nested inside probabilistic constraints.
+- Evaluated division-by-zero guards in their local Boolean context, keeping solver and model-evaluator results consistent under disjunction and the other logical connectives.
+- Started the cancellation deadline at the abort request rather than after cancellation cleanup, with bounded fallback and deduplicated solver reinitialization.
+- Gave conjunction, disjunction, conditional, and biconditional their conventional precedence while preserving right associativity within each level.
+- Added explicit limits of 12 sentence letters per truth table and absolute integer exponents of 1024 to prevent accidental exponential or linear resource exhaustion.
+- Parenthesized negative power bases in MathML output and documented power/precedence behavior in both help surfaces.
+
+### Changed: Chromium Test Gate and Production Caching
+
+- Upgraded Playwright and the development toolchain, removed Firefox/WebKit projects, and made the browser suite Chromium-only and serial.
+- Included browser tests and configuration files in TypeScript and ESLint checks; fixed a missing `await` and other async test hygiene issues.
+- Added end-to-end coverage for stale debounced input plus unit regressions for negative powers, local division-by-zero guards, precedence, cancellation timing, and resource limits.
+- Restricted immutable caching to Vite's content-hashed assets; stable Z3 and service-worker filenames now revalidate.
+- Re-enabled the three previously skipped cancellation scenarios after making them bounded and reliable.
+- Verification: `npm run lint`, `npm run build`, and `npm test` pass (600 unit tests and all 19 Chromium tests). `npm audit` reports 0 vulnerabilities.
+
 ## 2026-06-12
 
 ### Added: Decimals toggle in Evaluate model

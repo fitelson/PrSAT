@@ -151,7 +151,7 @@ describe('WrappedSolver', () => {
             inner_controller.abort()  // don't actually abort!
           }
         }
-        signal?.addEventListener('abort', inner_on_cancel)
+        signal?.addEventListener('abort', () => { void inner_on_cancel() })
         await sleep(on_run_timeout, inner_controller.signal)
         return 'finished'
       }
@@ -212,6 +212,24 @@ describe('WrappedSolver', () => {
         fudge_ms: 20,
         ignore_abort: true,
       }, 'slow-cancelled')
+    })
+
+    test('cancel timeout includes slow cancellation cleanup', async () => {
+      const ac = new AbortController()
+      const start = performance.now()
+      const result_promise = run_solve_cancel_logic(
+        async () => await new Promise<'finished'>(() => {}),
+        async () => {
+          await sleep(200)
+          return 'cancelled' as const
+        },
+        async () => 'slow-cancelled' as const,
+        20,
+        ac.signal,
+      )
+      ac.abort()
+      expect(await result_promise).toEqual('slow-cancelled')
+      expect(performance.now() - start).toBeLessThan(100)
     })
   })
 })
