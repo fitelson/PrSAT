@@ -1,0 +1,11 @@
+name: PrSAT family contracts
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  family-contracts:
+    uses: fitelson/PrSAT-family-contracts/.github/workflows/family-contracts.yml@main
+
