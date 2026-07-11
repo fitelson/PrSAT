@@ -119,6 +119,9 @@ export class TruthTable {
 
   constructor(readonly variables: Readonly<VariableLists>) {
     this.letter_ids = [...new LetterSet(variables.sentence)].sort(comp_letters)
+    if (this.letter_ids.length > 12) {
+      throw new Error(`Classical and ERS modes support at most 12 distinct sentence letters (4096 states); received ${this.letter_ids.length}.`)
+    }
     this.state_table = TruthTable.enumerate_states(this.letter_ids)
   }
 

@@ -1559,14 +1559,13 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
 
   const start_search_solver = async (solver: WrappedSolver, constraints: Constraint[], is_regular: boolean): Promise<void> => {
     const semantic_mode = probability_semantics.get()
-    const truth_table = semantic_mode === 'trivalent-cck'
-      ? new CCKTruthTable(variables_in_constraints(constraints))
-      : new TruthTable(variables_in_constraints(constraints))
-    // state.set({ tag: 'looking', truth_table })
-    const abort_controller = new AbortController()
-    state2.set({ tag: 'looking', truth_table, abort_controller })
-    model_container.innerHTML = ''
     try {
+      const truth_table = semantic_mode === 'trivalent-cck'
+        ? new CCKTruthTable(variables_in_constraints(constraints))
+        : new TruthTable(variables_in_constraints(constraints))
+      const abort_controller = new AbortController()
+      state2.set({ tag: 'looking', truth_table, abort_controller })
+      model_container.innerHTML = ''
       if (has_probability_table(truth_table)) {
         model_container.appendChild(truth_table_display(truth_table))
       }
