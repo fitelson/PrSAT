@@ -6,13 +6,13 @@ import {
   enrich_constraints,
   free_real_variables_in_constraint_or_real_expr,
   free_variables_in_constraint_or_real_expr,
+  guard_div0_conditions_in_constraint,
   LetterSet,
   real_expr_to_smtlib,
   TruthTable,
 } from './pr_sat'
 import { s_to_string } from './s'
 import { ConstraintOrRealExpr, PrSat } from './types'
-import { fallthrough } from './utils'
 import {
   constraint_to_bool,
   expr_to_assignment,
@@ -62,6 +62,9 @@ export const fancy_evaluate_constraint_or_real_expr_cck = async <CtxKey extends 
 ): Promise<FancyEvaluatorOutput> => {
   const free_sentence_vars = free_variables_in_constraint_or_real_expr(c_or_re, new LetterSet(), new LetterSet([...tt.letters()]))
   const free_real_vars = free_real_variables_in_constraint_or_real_expr(c_or_re, new Set<string>())
+  for (const declared of tt.variables.real) {
+    free_real_vars.delete(declared)
+  }
 
   if (!free_sentence_vars.is_empty() || free_real_vars.size > 0) {
     return { tag: 'undeclared-vars', variables: { sentence: [...free_sentence_vars], real: [...free_real_vars] } }
@@ -69,6 +72,17 @@ export const fancy_evaluate_constraint_or_real_expr_cck = async <CtxKey extends 
 
   const translated_c_or_re = translate_constraint_or_real_expr_cck(tt, c_or_re)
   const index_to_eliminate = tt.n_states() - 1
+
+  if (c_or_re.tag === 'constraint') {
+    const translated = translate_constraint_cck(tt, c_or_re.constraint)
+    const guarded = guard_div0_conditions_in_constraint(translated)
+    const [_, eliminated] = eliminate_state_variable_index_in_constraint_or_real_expr(
+      tt.n_states(), index_to_eliminate, { tag: 'constraint', constraint: guarded },
+    )
+    if (eliminated.tag !== 'constraint') throw new Error('Expected constraint after elimination')
+    const result = model.eval(constraint_to_bool(ctx, model, eliminated.constraint), true)
+    return { tag: 'bool-result', result: result.sexpr() === 'true' }
+  }
 
   for (const div0_constraint of div0_conditions_in_constraint_or_real_expr(translated_c_or_re)) {
     const [_, eliminated_div0] = eliminate_state_variable_index_in_constraint_or_real_expr(
@@ -87,17 +101,10 @@ export const fancy_evaluate_constraint_or_real_expr_cck = async <CtxKey extends 
     index_to_eliminate,
     translated_c_or_re,
   )
-  if (eliminated.tag === 'constraint') {
-    const z3_expr = constraint_to_bool(ctx, model, eliminated.constraint)
-    const result = model.eval(z3_expr, true)
-    return { tag: 'bool-result', result: result.sexpr() === 'true' }
-  } else if (eliminated.tag === 'real_expr') {
-    const z3_expr = real_expr_to_arith(ctx, model, eliminated.real_expr)
-    const output = await expr_to_assignment(ctx, model, z3_expr)
-    return { tag: 'result', result: output }
-  } else {
-    return fallthrough('fancy_evaluate_constraint_or_real_expr_cck', eliminated)
-  }
+  if (eliminated.tag !== 'real_expr') throw new Error('Expected real expression after elimination')
+  const z3_expr = real_expr_to_arith(ctx, model, eliminated.real_expr)
+  const output = await expr_to_assignment(ctx, model, z3_expr)
+  return { tag: 'result', result: output }
 }
 
 type CCKSolverOptions = {

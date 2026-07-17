@@ -1,7 +1,10 @@
 import { describe, test, expect } from 'vitest'
-import { ModelAssignmentOutput, model_assignment_output_to_string, model_assignment_output_to_s, parse_to_assignment, poly_s, run_solve_cancel_logic } from './z3_integration'
+import { init_z3, ModelAssignmentOutput, model_assignment_output_to_string, model_assignment_output_to_s, parse_to_assignment, poly_s, pr_sat_with_options, pr_sat_wrapped, run_solve_cancel_logic, WrappedSolver } from './z3_integration'
 import { S } from './s'
 import { sleep } from './utils'
+import { parse_constraint } from './parser'
+import { TruthTable, variables_in_constraints } from './pr_sat'
+import { PrSat } from './types'
 
 describe('parse_to_assignment', () => {
   describe('negative', () => {
@@ -125,6 +128,43 @@ describe('model assignment display helpers', () => {
 })
 
 describe('WrappedSolver', () => {
+  test('sends the translated probability problem directly to Z3', async () => {
+    type Constraint = PrSat['Constraint']
+    const constraints = ['Pr(A | B) > 1/2'].map((line) => parse_constraint(line)[1] as Constraint)
+    const tt = new TruthTable(variables_in_constraints(constraints))
+    let sent = ''
+    const fake_solver = {
+      solve: async (smtlib: string) => {
+        sent = smtlib
+        return { status: 'unknown' as const }
+      },
+    } as unknown as WrappedSolver
+
+    const result = await pr_sat_wrapped(fake_solver, tt, constraints)
+    expect(result.solver_output.status).toBe('unknown')
+    expect(sent).toContain('(/')
+    expect(sent).toContain('(assert')
+  })
+
+  test('legacy Context API returns assignments in the original coordinates', async () => {
+    type Constraint = PrSat['Constraint']
+    const constraints = [
+      'Pr(A & B) = Pr(A)',
+      'Pr(A) = 1/2',
+      'Pr(B) > 0',
+    ].map((line) => parse_constraint(line)[1] as Constraint)
+    const tt = new TruthTable(variables_in_constraints(constraints))
+    const z3 = await init_z3()
+    const result = await pr_sat_with_options(z3.Context('legacy-model'), tt, constraints)
+    expect(result.status).toBe('sat')
+    if (result.status === 'sat') {
+      expect([result.model[0], result.model[1]]).not.toEqual([
+        { tag: 'literal', value: 0 },
+        { tag: 'literal', value: 0 },
+      ])
+    }
+  })
+
   describe('solve stuff', () => {
     type R = 'finished' | 'cancelled' | 'slow-cancelled'
     const test_cancel = async (
@@ -151,7 +191,7 @@ describe('WrappedSolver', () => {
             inner_controller.abort()  // don't actually abort!
           }
         }
-        signal?.addEventListener('abort', inner_on_cancel)
+        signal?.addEventListener('abort', () => { void inner_on_cancel() })
         await sleep(on_run_timeout, inner_controller.signal)
         return 'finished'
       }

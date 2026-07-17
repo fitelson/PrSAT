@@ -27,6 +27,7 @@
 // normalize_constraint (De Morgan + iff/imp expansion + atom flips).
 
 import { PrSat } from './types'
+import { MAX_ABS_SOLVER_EXPONENT } from './pr_sat'
 
 type RealExpr = PrSat['RealExpr']
 type Constraint = PrSat['Constraint']
@@ -153,7 +154,13 @@ export const evaluate_real_expr_number = (expr: RealExpr, x: number[]): number =
   if (expr.tag === 'multiply') return sub(expr.left) * sub(expr.right)
   if (expr.tag === 'ite') return sub(evaluate_constraint_bool_number(expr.condition, x) ? expr.then_expr : expr.else_expr)
   if (expr.tag === 'divide') return sub(expr.numerator) / sub(expr.denominator)
-  if (expr.tag === 'power') return Math.pow(sub(expr.base), sub(expr.exponent))
+  if (expr.tag === 'power') {
+    const exponent = sub(expr.exponent)
+    if (!Number.isInteger(exponent) || Math.abs(exponent) > MAX_ABS_SOLVER_EXPONENT) {
+      throw new Error(`Random Search exponent must be an integer with magnitude at most ${MAX_ABS_SOLVER_EXPONENT}; received ${exponent}.`)
+    }
+    return Math.pow(sub(expr.base), exponent)
+  }
   throw new Error(`evaluate_real_expr_number: fallthrough`)
 }
 

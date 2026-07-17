@@ -416,14 +416,14 @@ describe('z3', () => {
         const { status: sat, model: _ } = await pr_sat(Context('main'), constraints)
         expect(sat).toEqual('unsat')
       })
-      describe('s (which takes too long so we\'re testing timing stuff)', () => {
+      describe('s (equation preprocessing avoids the formerly slow Z3 path)', () => {
         test.skip('by itself', async () => {
           const { Context } = await init_z3()
           const constraints = desideratum(sk)
           const { status: sat, model: _ } = await pr_sat(Context('main'), constraints)
           expect(sat).toEqual('sat')
         })
-        test('with timeout', async () => {
+        test('solves before the backend timeout', async () => {
           const { Context } = await init_z3()
           const constraints = desideratum(sk)
           const start = performance.now()
@@ -432,7 +432,7 @@ describe('z3', () => {
           const fudge = 1_000
           const { status: sat, model: _ } = await pr_sat_with_options(Context('main'), tt, constraints, { timeout_ms })
           const end = performance.now()
-          expect(sat).toEqual('unknown')
+          expect(sat).toEqual('sat')
           expect(end - start).toBeLessThan(timeout_ms + fudge)
         })
       })

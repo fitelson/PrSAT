@@ -24,12 +24,14 @@
 
 import {
   enrich_constraints,
+  constraint_to_smtlib,
   translate,
   translate_constraint_or_real_expr,
   TruthTable,
   div0_conditions_in_constraint_or_real_expr,
   free_real_variables_in_constraint_or_real_expr,
   free_variables_in_constraint_or_real_expr,
+  guard_div0_conditions_in_constraint,
   LetterSet,
   variables_in_constraints,
 } from './pr_sat'
@@ -46,6 +48,7 @@ import {
 } from './equation_elimination'
 import { solve_zero_dimensional, ZeroDimCaps } from './groebner'
 import { MapleBranch, solve_equations_via_maple } from './maple_bridge_client'
+import { find_exact_tangent_model, preprocess_rational_rows, solve_equations_in_browser } from './browser_equation_solver'
 import { extract_equation_system, substitute_constraint_indices } from './equation_elimination'
 import { Random } from './random'
 import { sleep } from './utils'
@@ -76,6 +79,8 @@ type RealExpr = PrSat['RealExpr']
 export const DEFAULT_REG_MARGIN = 1e-3
 export const DEFAULT_SEARCH_ATTEMPTS = 3
 export const DEFAULT_MAX_RATIONALIZE_ATTEMPTS = 40
+export const MAX_RANDOM_SEARCH_ATTEMPTS = 100
+export const MAX_RANDOM_RATIONALIZE_ATTEMPTS = 200
 export type ProbabilitySemantics = 'classical' | 'trivalent-ers' | 'trivalent-cck'
 
 // Numeric acceptance threshold. Non-strict inequalities sitting exactly on
@@ -108,6 +113,9 @@ export type RandomSearchOptions = {
   seed?: string
   abort_signal?: AbortSignal
   onTranslated?: (translated: Constraint[]) => void
+  // Enabled by default. Tests can disable it to exercise Maple strictly as a
+  // differential oracle rather than allowing the browser engine to win first.
+  browser_equation_solver: boolean
   // Optional local Maple bridge (maple_bridge/server.mjs): equations are
   // solved by desktop Maple and each rational solution branch is searched.
   maple_bridge_url?: string
@@ -120,6 +128,7 @@ const DEFAULTS: Omit<RandomSearchOptions, 'seed' | 'abort_signal' | 'onTranslate
   margin: MATHEMATICA_MARGIN,
   reg_margin: DEFAULT_REG_MARGIN,
   max_rationalize_attempts: DEFAULT_MAX_RATIONALIZE_ATTEMPTS,
+  browser_equation_solver: true,
 }
 
 // Matches PrSATResult from z3_integration.ts (so callers can interoperate)
@@ -138,6 +147,7 @@ export type RandomPrSATResult = {
   semantics: ProbabilitySemantics
   seed: string
   used_maple_bridge?: boolean
+  used_browser_equation_solver?: boolean
   // Exact rational model (when sat) — plain data, so it survives the
   // structured clone across the Web Worker boundary; the main thread rebuilds
   // the `evaluate` closure from it.
@@ -249,13 +259,21 @@ export const build_rational_evaluator = (
   const declared_letters = new LetterSet([...evt_tt.letters()])
   const free_sent = free_variables_in_constraint_or_real_expr(c_or_re, new LetterSet(), declared_letters)
   const free_real = free_real_variables_in_constraint_or_real_expr(c_or_re, new Set())
+  for (const declared of evt_tt.variables.real) free_real.delete(declared)
   if (!free_sent.is_empty() || free_real.size > 0) {
     return { tag: 'undeclared-vars', variables: { sentence: [...free_sent], real: [...free_real] } }
   }
 
   const translated_c_or_re = translate_constraint_or_real_expr(evt_tt, c_or_re)
 
-  // Check div0 conditions against the rational model.
+  if (translated_c_or_re.tag === 'constraint') {
+    const guarded = guard_div0_conditions_in_constraint(translated_c_or_re.constraint)
+    const result = evaluate_constraint_rational(guarded, rational_assignments)
+    if (result.tag !== 'ok') return { tag: 'div0' }
+    return { tag: 'bool-result', result: result.value }
+  }
+
+  // Real-expression evaluation requires every denominator to be defined.
   const div0s = div0_conditions_in_constraint_or_real_expr(translated_c_or_re)
   for (const c of div0s) {
     const result = evaluate_constraint_rational(c, rational_assignments)
@@ -266,12 +284,6 @@ export const build_rational_evaluator = (
     if (result.value === false) return { tag: 'div0' }
   }
 
-  // Evaluate the expression/constraint itself.
-  if (translated_c_or_re.tag === 'constraint') {
-    const result = evaluate_constraint_rational(translated_c_or_re.constraint, rational_assignments)
-    if (result.tag !== 'ok') return { tag: 'div0' }  // best-effort fallback
-    return { tag: 'bool-result', result: result.value }
-  }
   const result = evaluate_real_expr_rational(translated_c_or_re.real_expr, rational_assignments)
   if (result.tag !== 'ok') return { tag: 'div0' }
   return { tag: 'result', result: rational_to_model_assignment(result.value) }
@@ -283,11 +295,18 @@ export const build_rational_cooper_evaluator = (
   const declared_letters = new LetterSet([...evt_tt.letters()])
   const free_sent = free_variables_in_constraint_or_real_expr(c_or_re, new LetterSet(), declared_letters)
   const free_real = free_real_variables_in_constraint_or_real_expr(c_or_re, new Set())
+  for (const declared of evt_tt.variables.real) free_real.delete(declared)
   if (!free_sent.is_empty() || free_real.size > 0) {
     return { tag: 'undeclared-vars', variables: { sentence: [...free_sent], real: [...free_real] } }
   }
 
   const translated_c_or_re = translate_constraint_or_real_expr_cooper(evt_tt, c_or_re)
+  if (translated_c_or_re.tag === 'constraint') {
+    const guarded = guard_div0_conditions_in_constraint(translated_c_or_re.constraint)
+    const result = evaluate_constraint_rational(guarded, rational_assignments)
+    if (result.tag !== 'ok') return { tag: 'div0' }
+    return { tag: 'bool-result', result: result.value }
+  }
   const div0s = div0_conditions_in_constraint_or_real_expr(translated_c_or_re)
   for (const c of div0s) {
     const result = evaluate_constraint_rational(c, rational_assignments)
@@ -295,11 +314,6 @@ export const build_rational_cooper_evaluator = (
     if (result.value === false) return { tag: 'div0' }
   }
 
-  if (translated_c_or_re.tag === 'constraint') {
-    const result = evaluate_constraint_rational(translated_c_or_re.constraint, rational_assignments)
-    if (result.tag !== 'ok') return { tag: 'div0' }
-    return { tag: 'bool-result', result: result.value }
-  }
   const result = evaluate_real_expr_rational(translated_c_or_re.real_expr, rational_assignments)
   if (result.tag !== 'ok') return { tag: 'div0' }
   return { tag: 'result', result: rational_to_model_assignment(result.value) }
@@ -311,11 +325,18 @@ export const build_rational_cck_evaluator = (
   const declared_letters = new LetterSet([...evt_tt.letters()])
   const free_sent = free_variables_in_constraint_or_real_expr(c_or_re, new LetterSet(), declared_letters)
   const free_real = free_real_variables_in_constraint_or_real_expr(c_or_re, new Set())
+  for (const declared of evt_tt.variables.real) free_real.delete(declared)
   if (!free_sent.is_empty() || free_real.size > 0) {
     return { tag: 'undeclared-vars', variables: { sentence: [...free_sent], real: [...free_real] } }
   }
 
   const translated_c_or_re = translate_constraint_or_real_expr_cck(evt_tt, c_or_re)
+  if (translated_c_or_re.tag === 'constraint') {
+    const guarded = guard_div0_conditions_in_constraint(translated_c_or_re.constraint)
+    const result = evaluate_constraint_rational(guarded, rational_assignments)
+    if (result.tag !== 'ok') return { tag: 'div0' }
+    return { tag: 'bool-result', result: result.value }
+  }
   const div0s = div0_conditions_in_constraint_or_real_expr(translated_c_or_re)
   for (const c of div0s) {
     const result = evaluate_constraint_rational(c, rational_assignments)
@@ -323,11 +344,6 @@ export const build_rational_cck_evaluator = (
     if (result.value === false) return { tag: 'div0' }
   }
 
-  if (translated_c_or_re.tag === 'constraint') {
-    const result = evaluate_constraint_rational(translated_c_or_re.constraint, rational_assignments)
-    if (result.tag !== 'ok') return { tag: 'div0' }
-    return { tag: 'bool-result', result: result.value }
-  }
   const result = evaluate_real_expr_rational(translated_c_or_re.real_expr, rational_assignments)
   if (result.tag !== 'ok') return { tag: 'div0' }
   return { tag: 'result', result: rational_to_model_assignment(result.value) }
@@ -403,7 +419,8 @@ const search_maple_branch = async (
   }
   let residual_compact: Constraint[]
   try {
-    residual_compact = other_conjuncts.map((c) => substitute_constraint_indices(c, replace_index))
+    residual_compact = [...other_conjuncts, ...(branch.conditions ?? [])]
+      .map((c) => substitute_constraint_indices(c, replace_index))
   } catch {
     return undefined
   }
@@ -491,6 +508,15 @@ export const random_pr_sat_wrapped = async (
   options?: Partial<RandomSearchOptions>,
 ): Promise<RandomPrSATResult> => {
   const opts: RandomSearchOptions = { ...DEFAULTS, ...(options ?? {}) }
+  if (!Number.isInteger(opts.search_attempts) || opts.search_attempts < 1 || opts.search_attempts > MAX_RANDOM_SEARCH_ATTEMPTS) {
+    throw new Error(`Random search attempts must be an integer from 1 to ${MAX_RANDOM_SEARCH_ATTEMPTS}; received ${opts.search_attempts}.`)
+  }
+  if (!Number.isInteger(opts.max_rationalize_attempts) || opts.max_rationalize_attempts < 1 || opts.max_rationalize_attempts > MAX_RANDOM_RATIONALIZE_ATTEMPTS) {
+    throw new Error(`Rationalization attempts must be an integer from 1 to ${MAX_RANDOM_RATIONALIZE_ATTEMPTS}; received ${opts.max_rationalize_attempts}.`)
+  }
+  if (!Number.isFinite(opts.margin) || opts.margin <= 0 || !Number.isFinite(opts.reg_margin) || opts.reg_margin <= 0) {
+    throw new Error('Random search margins must be finite positive numbers.')
+  }
 
   // Reject free real variables up front — v1 limitation.
   const vars = variables_in_constraints(constraints)
@@ -506,6 +532,9 @@ export const random_pr_sat_wrapped = async (
     : opts.semantics === 'trivalent-cck'
       ? translate_constraints_cck(tt, constraints)
       : translate(tt, constraints)
+  // Validate solver-language restrictions (especially integer exponent shape
+  // and magnitude) before any numeric or polynomial work begins.
+  for (const constraint of translated) constraint_to_smtlib(constraint)
   opts.onTranslated?.(translated)
 
   const n_states = tt.n_states()
@@ -513,24 +542,19 @@ export const random_pr_sat_wrapped = async (
   // plus the equation Σ a_i = 1, which the linear elimination below absorbs
   // (eliminating the last variable is just its simplest special case).
   const enriched = enrich_constraints(tt, undefined, opts.regular, translated)
-
-  const elimination = eliminate_equations(n_states, enriched)
-
-  const output_constraints = {
-    original: constraints,
-    translated,
-    extra: enriched,
-    eliminated: elimination.tag === 'eliminated'
-      ? elimination.residual_conjuncts.map((c) => substitute_constraint(c, elimination))
-      : [],
-  }
+  let eliminated_constraints: Constraint[] = []
 
   const make_result = (
     attempts_used: number,
     solver_output: WrappedSolverResult,
     fmin?: number,
   ): RandomPrSATResult => ({
-    constraints: output_constraints,
+    constraints: {
+      original: constraints,
+      translated,
+      extra: enriched,
+      eliminated: eliminated_constraints,
+    },
     smtlib_input: describe_run(opts, random.seed_string, attempts_used, solver_output.status, fmin),
     method: 'random',
     semantics: opts.semantics,
@@ -540,6 +564,38 @@ export const random_pr_sat_wrapped = async (
     solver_output,
   })
 
+  if (opts.abort_signal?.aborted) {
+    return make_result(0, { status: 'cancelled' })
+  }
+
+  const extracted_equations = extract_equation_system(enriched)
+  if (opts.browser_equation_solver && extracted_equations.equation_polys.length > 0) {
+    const tangent_model = find_exact_tangent_model(extracted_equations.equation_polys, enriched, n_states)
+    if (tangent_model !== undefined) {
+      const state_assignments: Record<number, ModelAssignmentOutput> = {}
+      for (const [key, value] of Object.entries(tangent_model)) {
+        state_assignments[Number(key)] = rational_to_model_assignment(value)
+      }
+      const result = make_result(0, {
+        status: 'sat',
+        state_assignments,
+        evaluate: build_rational_semantic_evaluator(opts.semantics, tangent_model),
+      })
+      result.used_browser_equation_solver = true
+      result.rational_model = tangent_model
+      return result
+    }
+  }
+
+  // This pass is deliberately unconditional. Random search never receives the
+  // original equation-constrained state space: equations are first solved into
+  // substitutions/residuals, even when a differential test disables the
+  // optional browser branch solver above.
+  const elimination = eliminate_equations(n_states, enriched)
+  eliminated_constraints = elimination.tag === 'eliminated'
+    ? elimination.residual_conjuncts.map((c) => substitute_constraint(c, elimination))
+    : []
+
   // Inconsistent linear equations: the original system is UNSAT — equations
   // (and the Σ a_i = 1 axiom) are implied by the system, so an inconsistent
   // linear subsystem refutes the whole thing. This is the one case where
@@ -548,12 +604,39 @@ export const random_pr_sat_wrapped = async (
     return make_result(0, { status: 'unsat' })
   }
 
-  // Optional local Maple bridge: hand the equations to desktop Maple, then
-  // search each rational solution branch (PrSAT.m's sol1[[i]] loop). Falls
-  // through if the bridge is unreachable, the solve fails, or no branch
-  // certifies.
+  // First try the bounded, zero-dependency browser branch solver. It returns
+  // the same rational-function branch contract as Maple; every candidate is
+  // still checked against the full enriched system in exact arithmetic.
+  if (opts.browser_equation_solver && extracted_equations.equation_polys.length > 0) {
+    const preprocessed_equations = preprocess_rational_rows(extracted_equations.equation_rows)
+    const branches = solve_equations_in_browser(preprocessed_equations, n_states, opts.abort_signal)
+    if (branches !== undefined) {
+      const ordered_branches = [...branches].sort((left, right) =>
+        left.free.size - right.free.size
+        || (left.conditions?.length ?? 0) - (right.conditions?.length ?? 0))
+      for (const branch of ordered_branches) {
+        if (opts.abort_signal?.aborted) break
+        const found = await search_maple_branch(branch, extracted_equations.other_conjuncts, enriched, n_states, random, opts)
+        if (found !== undefined) {
+          const state_assignments: Record<number, ModelAssignmentOutput> = {}
+          for (const [key, v] of Object.entries(found.assignments)) state_assignments[Number(key)] = rational_to_model_assignment(v)
+          const result = make_result(found.attempts, {
+            status: 'sat',
+            state_assignments,
+            evaluate: build_rational_semantic_evaluator(opts.semantics, found.assignments),
+          }, found.fmin)
+          result.used_browser_equation_solver = true
+          result.rational_model = found.assignments
+          return result
+        }
+      }
+    }
+  }
+
+  // Optional local Maple fallback/oracle. Falls through if the bridge is
+  // unreachable, the solve fails, or no branch certifies.
   if (opts.maple_bridge_url !== undefined) {
-    const { equation_polys, other_conjuncts } = extract_equation_system(enriched)
+    const { equation_polys, other_conjuncts } = extracted_equations
     if (equation_polys.length > 0) {
       const branches = await solve_equations_via_maple(equation_polys, n_states, opts.maple_bridge_url, opts.abort_signal)
       if (branches !== undefined) {

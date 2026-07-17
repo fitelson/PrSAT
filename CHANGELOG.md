@@ -2,6 +2,169 @@
 
 > **Note:** Experimental fork of 3.0 to prototype a Random Search solver alongside Z3. Not deployed. See `RANDOM_SEARCH.md` for the design, `CLAUDE.md` for guidance.
 
+## 2026-07-13
+
+### Changed: restored a simple solver boundary
+
+- Classical, ERS, and CCK Z3 now receive the direct semantic translation after
+  ordinary normalization-state elimination. Z3 no longer runs exact-witness
+  search, equation reduction, ratio elimination, product expansion, or the
+  canonical sparse-polynomial pass.
+- Removed the **Solve equations**, **Eliminate ratios**, and **Expand products**
+  controls and their Z3 API options. Random Search remains the only mode that
+  performs equation solving; its browser algebra and optional Maple path are
+  unchanged.
+- Under regularity, the direct path retains one cheap sign simplification:
+  nonempty state-mass sums are strictly positive, so redundant nonzero guards
+  on those probability denominators are omitted and totalized
+  `ite(D = 0, 1, N/D)` terms collapse to `N/D`, without cross multiplication
+  or expansion.
+- The removed experiments and benchmark results are preserved in
+  `ALGEBRAIC_PREPROCESSING_EXPERIMENTS_2026-07-13.md`. The entries below record
+  the experiments as they were implemented and are superseded by this change.
+- The corrected strict regular ERS Bayes-factor formulation returned UNSAT in
+  about 40 seconds in-browser and 14.03 seconds in native Z3 4.16.0. A focused
+  sweep of NLSAT sign, ordering, shuffling, seed, inlining, and combined
+  settings produced no speedup; explicit simplification/tactic pipelines were
+  worse, so the default Z3 settings remain unchanged.
+- Unit-test files now run serially so optional Maple integration tests cannot
+  race against the bridge's intentional one-request concurrency limit.
+
+### Added: bounded polynomial canonicalization before Z3
+
+- Added an automatic sparse-polynomial normalization pass after the
+  normalization state variable is eliminated and before SMT-LIB generation.
+  Supported comparisons are rewritten as a collected exact-rational
+  polynomial against zero.
+- The pass applies to classical, ERS, CCK, and reduced-equation Z3 paths. It
+  collects like monomials, removes zero coefficients, and cancels terms
+  introduced by substituting `a_n = 1 - sum(a_i)`.
+- Symbolic ratios, free real variables, `ite` expressions, unsupported powers,
+  and expansions beyond 20,000 terms remain unchanged. The expansion limit is
+  checked before multiplication.
+- Exact decimal source digits and integers beyond JavaScript's safe range are
+  preserved through polynomial conversion and serialization.
+
+### Added: probability-sign simplification for expanded ratios
+
+- When **Eliminate ratios** and **Expand products** are both selected, ordered
+  comparisons now recognize denominator polynomials whose monomial
+  coefficients are all nonnegative. Probability bounds make those
+  denominators nonnegative, and the preserved `D != 0` guard makes them
+  positive, so `N/D op 0` simplifies to `N op 0` instead of `N*D op 0`.
+- The optimization is not used with either checkbox off. Denominators with any
+  negative coefficient retain the conservative sign-safe `N*D` form.
+- On the four-constraint conditional-confirmation benchmark in
+  `src/conditional_confirmation_system.spec.ts`, final SMT-LIB shrinks from
+  26,782 to 2,299 characters under regularity. Direct Z3 still returns
+  `unknown` after 60 seconds, so this is retained as a bounded representation
+  simplification rather than presented as a decision procedure for the
+  benchmark.
+
+## 2026-07-12
+
+### Added: optional sign-safe ratio elimination
+
+- Added an **Eliminate ratios** Z3 checkbox, independent of **Solve
+  equations** and hidden when Random Search is selected.
+- Added a dependent **Expand products** checkbox. It distributes the final
+  sign-preserving `N*D` polynomial used by ordered comparisons; products over
+  the 20,000-term conversion limit remain factored.
+- Symbolic rational comparisons are converted to bounded polynomial form after
+  definedness guards are installed. For inequalities, `N/D < 0` becomes
+  `N*D < 0` with `D != 0`, so negative denominators are handled without an
+  unsound sign-blind cross multiplication.
+- Nested likelihood ratios and negative powers are supported. Exact rational
+  constants remain native coefficients. Oversized or unsupported atoms are
+  left unchanged rather than expanded unsafely.
+- ERS and CCK totalized `ite` probability expressions are lifted into guarded
+  branches before ratio elimination. Classical, ERS, and CCK use the same
+  transformer and option contract.
+- Regressions cover negative and zero denominators, nested ratios, negative
+  powers, ERS/CCK branch semantics, direct ratio-free Z3 solving, option
+  wiring, bounded full-product expansion, and Z3-only control visibility.
+
+### Fixed: exact witness search is independent of equation solving
+
+- Separated the bounded exact rational-witness presearch from optional
+  algebraic equation elimination. The presearch now runs whether **Solve
+  equations** is on or off; the toggle controls only further elimination,
+  branch solving, and reduced-backend attempts.
+- This fixes a misleading performance discontinuity for inequality-only input.
+  PrSAT's internal normalization equation previously activated the witness
+  search only when **Solve equations** was on, even though the successful work
+  was a general exact SAT-witness search rather than elimination of a user
+  equation.
+- Added regressions for the conditional-confirmation/likelihood-ratio example
+  and for the converse boundary: disabling equation solving still suppresses
+  algebraic reduction when the witness presearch finds no model.
+- Verification: TypeScript, ESLint, production build, and `git diff --check`
+  pass; 770 unit tests pass (1 skipped, 1 todo), and the focused Chromium
+  control test passes. The permanent local app and its rebuilt bundle return
+  200 at port 5317.
+
+## 2026-07-11
+
+### Added: zero-dependency equation solver and shared preprocessing
+
+- Added exact rational-row extraction that retains factored conditional-
+  probability structure and performs guarded cancellation and localized
+  complementary-row/ideal reduction.
+- Added `src/browser_equation_solver.ts`: bounded coefficient-aware branching,
+  lex Gröbner triangularization, pseudo-remainder elimination, rational factor
+  splitting, and exact back-substitution. Branch output is compatible with the
+  Maple bridge contract and records generic-chart nonzero conditions.
+- Added global branch memoization that includes the solved chain, preventing
+  distinct roots from being accidentally merged.
+- Added `src/equation_preprocessing.ts` as the shared pre-backend policy. Random
+  Search always eliminates equations; Z3 exposes a **Solve equations** toggle.
+- Added `src/equation_preprocessing_worker.ts`, keeping synchronous polynomial
+  and Gröbner work off the UI thread with cancellation by worker termination.
+- Retained Maple 2024 as an optional explicit Random Search equation engine.
+  The Maple checkbox selects Maple instead of browser algebra; it is not an
+  automatic fallback.
+
+### Changed: safe Z3 reduction and fallback policy
+
+- Classical, ERS, and CCK now share `try_reduced_equation_problem` rather than
+  maintaining three copies of the reduction logic.
+- Partial reductions are used only when their actual SMT-LIB is no larger than
+  the original sparse formulation.
+- Reduced solves receive at most one quarter of the requested timeout, capped
+  at five seconds. `unknown` and generic-chart-only UNSAT retry the original
+  formulation with the remaining budget.
+- Every reduced SAT result is back-substituted and evaluated against every
+  original user constraint under the selected semantics before acceptance.
+- The legacy Context API consumes only globally safe preprocessing outcomes;
+  it no longer treats compact reduced coordinates as the original atom model.
+
+### Fixed: equation-solving soundness and cancellation
+
+- Preserved `d != 0` when extracting a non-`1` equation from totalized
+  `ite(d = 0, 1, n/d)`. This fixes confirmed false ERS SAT results at zero
+  denominators.
+- Fixed coefficient-zero branch loss that could make the legacy Z3 API report
+  false UNSAT.
+- Fixed expanding rational substitutions that made the regular
+  likelihood-ratio problem time out with preprocessing enabled even though
+  sparse Z3 solved it immediately.
+- Gröbner normal-form loops now honor cancellation/deadline checks.
+- Browser branch diagnostics distinguish complete, partial, capped, and
+  unresolved decompositions.
+- Cancelling a Maple request now aborts the bridge's server-side Maple child,
+  rather than merely abandoning the browser fetch.
+
+### Added: differential and browser regressions
+
+- Added solve-on/solve-off regressions for coefficient-zero branches, legacy
+  model coordinates, ERS totalized zero-denominator constraints, CCK semantic
+  agreement, reduced-model validation, and reduced-`unknown` fallback.
+- Added real Chromium coverage for the regular likelihood-ratio UNSAT result
+  through the equation worker and for ERS totalized semantics.
+- Final verification: production build, TypeScript, ESLint, and
+  `git diff --check` pass; 749 unit tests pass (1 skipped, 1 todo); 27 Chromium
+  tests pass (1 skipped). Live PrSAT and Maple 2024 bridge are healthy.
+
 ## 2026-06-24
 
 ### Added: Cantwell-Cooper-Kleene trivalent mode
@@ -39,7 +202,7 @@ Revisited browser-runnable alternatives to Maple for the Random Search equation-
 
 - Pyodide/SymPy solved toy systems but timed out on the likelihood-ratio benchmark.
 - Browser Giac/Xcas (`giac.js`) ran headlessly and solved toy equations, but returned unusable branches for the simple independence benchmark and errored on the likelihood-ratio benchmark.
-- Maple 2024/2026 solved the substantive benchmark systems quickly and returned exactly the rational-function branches the current verification pipeline consumes.
+- Maple 2024 solved the substantive benchmark systems quickly and returned exactly the rational-function branches the current verification pipeline consumes.
 
 So the supported equation-solving accelerator remains the optional local Maple bridge. `RANDOM_SEARCH.md` records this decision.
 
@@ -68,7 +231,7 @@ Result on the independence system via the bridge: the canonical XOR witness — 
 
 ### Added: local Maple bridge — browser as frontend, desktop Maple as equation oracle
 
-Confirmed working in-browser by Branden on both benchmark systems. New architecture option for the experimental fork (deployed PrSAT remains 100% in-browser): `npm run maple-bridge` starts a zero-dependency local server (`maple_bridge/server.mjs`, port 31415) that runs `/Applications/Maple 2024/maple` on the cross-multiplied equation polynomials and returns `solve`'s solution branches. The browser (`src/maple_bridge_client.ts` + `src/maple_expr.ts`) parses each rational-function branch back into RealExpr ASTs (RootOf/float branches discarded — sound incompleteness), substitutes into the remaining inequalities, random-searches the branch's free variables, snaps to small fractions, evaluates the solved variables exactly, and verifies the full system in exact rational arithmetic — PrSAT.m's `sol1[[i]]` loop with Maple as the Solve oracle. UI: "Maple bridge: connected/off" indicator next to the Random Search options (click to re-check); result badge shows "via Random Search + Maple bridge". Automatic fallback to the pure-browser pipeline when the bridge is off or no branch certifies. Tests: `src/maple_bridge.spec.ts` (self-skips without the bridge).
+Confirmed working in-browser by Branden on both benchmark systems. New architecture option for the experimental fork (deployed PrSAT remains 100% in-browser): `npm run maple-bridge` starts a zero-dependency local server (`maple_bridge/server.mjs`, port 31415) that runs `/Applications/Maple 2024/maple` on the cross-multiplied equation polynomials and returns `solve`'s solution branches. The browser (`src/maple_bridge_client.ts` + `src/maple_expr.ts`) parses each rational-function branch back into RealExpr ASTs (RootOf/float branches discarded — sound incompleteness), substitutes into the remaining inequalities, random-searches the branch's free variables, snaps to small fractions, evaluates the solved variables exactly, and verifies the full system in exact rational arithmetic — PrSAT.m's `sol1[[i]]` loop with Maple as the Solve oracle. UI: "Maple bridge: connected/off" indicator next to the Random Search options (click to re-check); result badge shows "via Random Search + Maple bridge". The initial automatic-fallback behavior described in this June entry was superseded on July 11: Maple is now used only when explicitly selected. Tests: `src/maple_bridge.spec.ts` (self-skips without the bridge).
 
 ### Fixed: Random Search responsiveness and blowup guards
 

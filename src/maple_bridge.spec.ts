@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 import { random_pr_sat } from "./random_search"
-import { ping_maple_bridge } from "./maple_bridge_client"
+import { DEFAULT_MAPLE_BRIDGE_URL, ping_maple_bridge, random_search_equation_engine_options } from "./maple_bridge_client"
 import { parse_constraint } from "./parser"
 
 const fmt = (v: any): string => v.tag === 'literal' ? String(v.value) : v.tag === 'rational' ? `${v.numerator.value}/${v.denominator.value}` : '?'
@@ -29,6 +29,21 @@ const trivalent_branch_lines = [
 // These tests exercise the LOCAL Maple bridge (npm run maple-bridge). They
 // self-skip when the bridge is not running, so CI / bridge-less runs pass.
 describe('maple bridge end-to-end', () => {
+  test('Maple selection is exclusive with browser equation solving', () => {
+    expect(random_search_equation_engine_options(false, true)).toEqual({
+      browser_equation_solver: true,
+      maple_bridge_url: undefined,
+    })
+    expect(random_search_equation_engine_options(true, false)).toEqual({
+      browser_equation_solver: true,
+      maple_bridge_url: undefined,
+    })
+    expect(random_search_equation_engine_options(true, true)).toEqual({
+      browser_equation_solver: false,
+      maple_bridge_url: DEFAULT_MAPLE_BRIDGE_URL,
+    })
+  })
+
   let bridge_up = false
   test('bridge reachable (skips the rest when off)', async () => {
     bridge_up = await ping_maple_bridge()
@@ -38,19 +53,21 @@ describe('maple bridge end-to-end', () => {
     if (!bridge_up) return
     const constraints = lr_lines.map((l) => (parse_constraint(l) as any)[1])
     const t0 = Date.now()
-    const result = await random_pr_sat(constraints, { seed: 'bridge-lr', search_attempts: 10, maple_bridge_url: 'http://127.0.0.1:31415' })
+    const result = await random_pr_sat(constraints, { seed: 'bridge-lr', search_attempts: 10, browser_equation_solver: false, maple_bridge_url: 'http://127.0.0.1:31415' })
     console.log('LR: status', result.solver_output.status, 'bridge:', result.used_maple_bridge, 'wall ms:', Date.now() - t0)
     if (result.solver_output.status === 'sat') {
       const sa = result.solver_output.state_assignments as any
       console.log('LR MODEL:', Object.entries(sa).map(([k,v]) => `a_${Number(k)+1}=${fmt(v)}`).join(' '))
     }
     expect(result.solver_output.status).toBe('sat')
+    expect(result.used_maple_bridge).toBe(true)
+    expect(result.used_browser_equation_solver).not.toBe(true)
   }, 300_000)
   test('3-wise independence via bridge', async () => {
     if (!bridge_up) return
     const constraints = indep_lines.map((l) => (parse_constraint(l) as any)[1])
     const t0 = Date.now()
-    const result = await random_pr_sat(constraints, { seed: 'bridge-indep', search_attempts: 10, maple_bridge_url: 'http://127.0.0.1:31415' })
+    const result = await random_pr_sat(constraints, { seed: 'bridge-indep', search_attempts: 10, browser_equation_solver: false, maple_bridge_url: 'http://127.0.0.1:31415' })
     console.log('INDEP: status', result.solver_output.status, 'bridge:', result.used_maple_bridge, 'wall ms:', Date.now() - t0)
     if (result.solver_output.status === 'sat') {
       const sa = result.solver_output.state_assignments as any
@@ -65,7 +82,7 @@ describe('maple bridge end-to-end', () => {
     if (!bridge_up) return
     const constraints = indep_lines.map((l) => (parse_constraint(l) as any)[1])
     const t0 = Date.now()
-    const result = await random_pr_sat(constraints, { seed: 'regular-1', search_attempts: 15, regular: true, maple_bridge_url: 'http://127.0.0.1:31415' })
+    const result = await random_pr_sat(constraints, { seed: 'regular-1', search_attempts: 15, regular: true, browser_equation_solver: false, maple_bridge_url: 'http://127.0.0.1:31415' })
     console.log('status:', result.solver_output.status, 'bridge:', result.used_maple_bridge, 'wall ms:', Date.now() - t0)
     if (result.solver_output.status === 'sat') {
       const rm = result.rational_model!
@@ -84,6 +101,7 @@ describe('maple bridge end-to-end', () => {
       seed: 'tri-branch',
       semantics: 'trivalent-ers',
       search_attempts: 3,
+      browser_equation_solver: false,
       maple_bridge_url: 'http://127.0.0.1:31415',
     })
     expect(result.solver_output.status).toBe('sat')
@@ -97,6 +115,7 @@ describe('maple bridge end-to-end', () => {
       seed: 'cck-santorio',
       semantics: 'trivalent-cck',
       search_attempts: 3,
+      browser_equation_solver: false,
       maple_bridge_url: 'http://127.0.0.1:31415',
     })
     expect(result.solver_output.status).toBe('sat')

@@ -27,3 +27,9 @@ npm run dev
 ```
 
 A link to PrSAT running locally will appear in your terminal.
+
+The permanent local app is always at http://localhost:5317/ and that port is
+reserved exclusively for its background service. `npm run dev` uses
+http://127.0.0.1:5173/ for development and debugging; `npm run preview` uses
+http://127.0.0.1:4173/; automated browser tests use port 5174. Temporary
+servers fail on a port conflict instead of moving to the permanent address.

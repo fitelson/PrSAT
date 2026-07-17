@@ -34,10 +34,10 @@
 //   branch, so we fall back to constant-denominator-only elimination instead.
 
 import { PrSat } from './types'
-import { real_expr_builder } from './pr_sat'
+import { MAX_ABS_SOLVER_EXPONENT, real_expr_builder } from './pr_sat'
 import {
   Rational, ZERO, ONE, r_add, r_mul, r_div, r_neg, r_sign, r_eq,
-  rationalize,
+  rationalize, r_from_decimal_string,
 } from './rationalize'
 
 type RealExpr = PrSat['RealExpr']
@@ -128,43 +128,144 @@ const poly_eval = (a: Poly, vals: Record<number, Rational>): Rational => {
   return acc
 }
 
-// ---------- RealExpr → rational function of polynomials ----------
+// ---------- RealExpr → factored rational function of polynomials ----------
 
-type PolyRat = { num: Poly, dens: Poly[] }
+// Conversion size cap: addition/subtraction can still require expansion, but
+// multiplication and division retain factor lists and cancel before expansion.
+const MAX_CONVERSION_TERMS = 20000
 
-const prat_of = (p: Poly): PolyRat => ({ num: p, dens: [] })
-const dens_product = (dens: Poly[]): Poly => dens.reduce(poly_mul, poly_const(ONE))
+type PolyRat = { scale: Rational, nums: Poly[], dens: Poly[] }
 
-const prat_combine = (negate_b: boolean, a: PolyRat, b: PolyRat): PolyRat => {
-  const bn = negate_b ? poly_neg(b.num) : b.num
+const poly_factor_signature = (p: Poly): string => [...p.values()]
+  .map((term) => `${term.mono.join(',')}:${term.coeff.n}/${term.coeff.d}`)
+  .sort()
+  .join(';')
+
+const normalize_prat = (input: PolyRat): PolyRat | undefined => {
+  let scale = input.scale
+  const nums: Poly[] = []
+  const dens: Poly[] = []
+  for (const factor of input.nums) {
+    const constant = poly_constant_value(factor)
+    if (constant === undefined) nums.push(factor)
+    else scale = r_mul(scale, constant)
+  }
+  for (const factor of input.dens) {
+    const constant = poly_constant_value(factor)
+    if (constant === undefined) dens.push(factor)
+    else {
+      if (r_sign(constant) === 0) return undefined
+      scale = r_div(scale, constant)
+    }
+  }
+  if (r_sign(scale) === 0) return { scale: ZERO, nums: [], dens: [] }
+
+  const denominator_indices = new Map<string, number[]>()
+  dens.forEach((factor, index) => {
+    const signature = poly_factor_signature(factor)
+    const indices = denominator_indices.get(signature) ?? []
+    indices.push(index)
+    denominator_indices.set(signature, indices)
+  })
+  const cancelled = new Set<number>()
+  const uncancelled_nums: Poly[] = []
+  for (const factor of nums) {
+    const index = denominator_indices.get(poly_factor_signature(factor))
+      ?.find((candidate) => !cancelled.has(candidate))
+    if (index === undefined) uncancelled_nums.push(factor)
+    else cancelled.add(index)
+  }
   return {
-    num: poly_add(poly_mul(a.num, dens_product(b.dens)), poly_mul(bn, dens_product(a.dens))),
-    dens: [...a.dens, ...b.dens],
+    scale,
+    nums: uncancelled_nums,
+    dens: dens.filter((_, index) => !cancelled.has(index)),
   }
 }
 
-// Conversion size cap: equations over many states (e.g. 6 letters = 64 state
-// variables with triple-product right-hand sides) can explode to 10^5+
-// monomials; past this cap the equation stays in the residual system (the
-// numeric cost function evaluates the original division form just fine).
-const MAX_CONVERSION_TERMS = 20000
+const prat_of = (p: Poly): PolyRat => ({ scale: ONE, nums: [p], dens: [] })
+
+const expand_factors = (scale: Rational, factors: Poly[]): Poly | undefined => {
+  let result = poly_const(scale)
+  for (const factor of factors) {
+    if (result.size !== 0
+      && factor.size > Math.floor(MAX_CONVERSION_TERMS / result.size)) return undefined
+    result = poly_mul(result, factor)
+    if (result.size > MAX_CONVERSION_TERMS) return undefined
+  }
+  return result
+}
+
+const same_factor_multiset = (left: Poly[], right: Poly[]): boolean => {
+  if (left.length !== right.length) return false
+  const left_signatures = left.map(poly_factor_signature).sort()
+  const right_signatures = right.map(poly_factor_signature).sort()
+  return left_signatures.every((signature, index) => signature === right_signatures[index])
+}
+
+const pull_common_factors = (left: Poly[], right: Poly[]): { common: Poly[], left: Poly[], right: Poly[] } => {
+  const right_indices = new Map<string, number[]>()
+  right.forEach((factor, index) => {
+    const signature = poly_factor_signature(factor)
+    const indices = right_indices.get(signature) ?? []
+    indices.push(index)
+    right_indices.set(signature, indices)
+  })
+  const used_right = new Set<number>()
+  const common: Poly[] = []
+  const left_only: Poly[] = []
+  for (const factor of left) {
+    const index = right_indices.get(poly_factor_signature(factor))
+      ?.find((candidate) => !used_right.has(candidate))
+    if (index === undefined) left_only.push(factor)
+    else {
+      common.push(factor)
+      used_right.add(index)
+    }
+  }
+  return { common, left: left_only, right: right.filter((_, index) => !used_right.has(index)) }
+}
+
+const prat_combine = (negate_b: boolean, raw_a: PolyRat, raw_b: PolyRat): PolyRat | undefined => {
+  const a = normalize_prat(raw_a)
+  const b = normalize_prat(raw_b)
+  if (a === undefined || b === undefined) return undefined
+  if (negate_b && r_eq(a.scale, b.scale)
+    && same_factor_multiset(a.nums, b.nums)
+    && same_factor_multiset(a.dens, b.dens)) {
+    return { scale: ZERO, nums: [], dens: [] }
+  }
+  const factored = pull_common_factors([...a.nums, ...b.dens], [...b.nums, ...a.dens])
+  const left = expand_factors(a.scale, factored.left)
+  const right = expand_factors(negate_b ? r_neg(b.scale) : b.scale, factored.right)
+  if (left === undefined || right === undefined) return undefined
+  return normalize_prat({
+    scale: ONE,
+    nums: [...factored.common, poly_add(left, right)],
+    dens: [...a.dens, ...b.dens],
+  })
+}
 
 const capped = (pr: PolyRat | undefined): PolyRat | undefined =>
-  pr === undefined || pr.num.size > MAX_CONVERSION_TERMS ? undefined : pr
+  pr === undefined || pr.nums.some((factor) => factor.size > MAX_CONVERSION_TERMS)
+    ? undefined
+    : normalize_prat(pr)
 
 // Returns undefined for expressions outside the supported fragment (free real
 // variables, untranslated probabilities, non-integer exponents) — the caller
 // then leaves the conjunct in the residual system.
 const real_expr_to_polyrat = (expr: RealExpr): PolyRat | undefined => {
   if (expr.tag === 'literal') {
-    return prat_of(poly_const(rationalize(expr.value, 1e-15)))
+    const scale = expr.source === undefined
+      ? rationalize(expr.value, 1e-15)
+      : r_from_decimal_string(expr.source)
+    return { scale, nums: [], dens: [] }
   } else if (expr.tag === 'state_variable_sum') {
     let p = poly_zero()
     for (const i of expr.indices) p = poly_add(p, poly_state(i))
     return prat_of(p)
   } else if (expr.tag === 'negative') {
     const inner = real_expr_to_polyrat(expr.expr)
-    return inner === undefined ? undefined : { num: poly_neg(inner.num), dens: inner.dens }
+    return inner === undefined ? undefined : { ...inner, scale: r_neg(inner.scale) }
   } else if (expr.tag === 'plus' || expr.tag === 'minus') {
     const l = real_expr_to_polyrat(expr.left)
     const r = real_expr_to_polyrat(expr.right)
@@ -173,12 +274,16 @@ const real_expr_to_polyrat = (expr: RealExpr): PolyRat | undefined => {
     const l = real_expr_to_polyrat(expr.left)
     const r = real_expr_to_polyrat(expr.right)
     return l === undefined || r === undefined ? undefined
-      : capped({ num: poly_mul(l.num, r.num), dens: [...l.dens, ...r.dens] })
+      : capped({ scale: r_mul(l.scale, r.scale), nums: [...l.nums, ...r.nums], dens: [...l.dens, ...r.dens] })
   } else if (expr.tag === 'divide') {
     const l = real_expr_to_polyrat(expr.numerator)
     const r = real_expr_to_polyrat(expr.denominator)
-    if (l === undefined || r === undefined) return undefined
-    return capped({ num: poly_mul(l.num, dens_product(r.dens)), dens: [...l.dens, r.num] })
+    if (l === undefined || r === undefined || r_sign(r.scale) === 0) return undefined
+    return capped({
+      scale: r_div(l.scale, r.scale),
+      nums: [...l.nums, ...r.dens],
+      dens: [...l.dens, ...r.nums],
+    })
   } else if (expr.tag === 'power') {
     const base = real_expr_to_polyrat(expr.base)
     if (base === undefined) return undefined
@@ -187,14 +292,17 @@ const real_expr_to_polyrat = (expr: RealExpr): PolyRat | undefined => {
       e.tag === 'literal' && Number.isSafeInteger(e.value) ? e.value
       : e.tag === 'negative' && e.expr.tag === 'literal' && Number.isSafeInteger(e.expr.value) ? -e.expr.value
       : undefined
-    if (exp_val === undefined || exp_val < 0) return undefined  // negative powers: rare, skip
-    let num = poly_const(ONE)
+    if (exp_val === undefined || Math.abs(exp_val) > MAX_ABS_SOLVER_EXPONENT) return undefined
+    if (exp_val < 0 && r_sign(base.scale) === 0) return undefined
+    let scale = ONE
+    const nums: Poly[] = []
     const dens: Poly[] = []
-    for (let i = 0; i < exp_val; i++) {
-      num = poly_mul(num, base.num)
-      dens.push(...base.dens)
+    for (let i = 0; i < Math.abs(exp_val); i++) {
+      scale = exp_val < 0 ? r_div(scale, base.scale) : r_mul(scale, base.scale)
+      nums.push(...(exp_val < 0 ? base.dens : base.nums))
+      dens.push(...(exp_val < 0 ? base.nums : base.dens))
     }
-    return { num, dens }
+    return capped({ scale, nums, dens })
   } else {
     return undefined  // variable / probability / given_probability
   }
@@ -218,6 +326,76 @@ export const flatten_conjuncts = (constraints: Constraint[]): Constraint[] => {
   return out
 }
 
+const guarded_nonzero_factor_signatures = (conjuncts: Constraint[]): Set<string> => {
+  const signatures = new Set<string>()
+  for (const constraint of conjuncts) {
+    const comparison = constraint.tag === 'not_equal' ? constraint
+      : constraint.tag === 'negation' && constraint.constraint.tag === 'equal' ? constraint.constraint
+      : undefined
+    if (comparison === undefined) continue
+    const expression = constant_value(comparison.left) === 0 ? comparison.right
+      : constant_value(comparison.right) === 0 ? comparison.left
+      : undefined
+    if (expression === undefined) continue
+    const rational = real_expr_to_polyrat(expression)
+    if (rational === undefined) continue
+    const normalized = normalize_prat(rational)
+    if (normalized === undefined || normalized.dens.length > 0 || r_sign(normalized.scale) === 0) continue
+    for (const factor of normalized.nums) signatures.add(poly_factor_signature(factor))
+  }
+  return signatures
+}
+
+// If p*f=0 and q*f=0 while p+q is guarded nonzero, then f=0. This localized
+// ideal-containment reduction is what turns complementary conditional rows
+// into one small marginal equation without dividing by either cell p or q.
+const reduce_guarded_complementary_rows = (
+  rows: EqRationalRow[],
+  guarded_nonzero: Set<string>,
+): EqRationalRow[] => {
+  const remaining = rows.filter((row) => row.num.size > 0)
+  const used = new Set<number>()
+  const reduced: EqRationalRow[] = []
+  for (let i = 0; i < remaining.length; i++) {
+    if (used.has(i)) continue
+    const left = remaining[i]!
+    const left_factors = left.numerator_factors
+    if (left_factors?.length !== 2) continue
+    let replacement: EqPoly | undefined
+    let partner = -1
+    for (let j = i + 1; j < remaining.length && replacement === undefined; j++) {
+      if (used.has(j)) continue
+      const right_factors = remaining[j]!.numerator_factors
+      if (right_factors?.length !== 2) continue
+      for (let li = 0; li < 2; li++) {
+        for (let ri = 0; ri < 2; ri++) {
+          if (poly_factor_signature(left_factors[li]!) !== poly_factor_signature(right_factors[ri]!)) continue
+          const cofactor_sum = poly_add(left_factors[1 - li]!, right_factors[1 - ri]!)
+          if (!guarded_nonzero.has(poly_factor_signature(cofactor_sum))) continue
+          replacement = left_factors[li]!
+          partner = j
+          break
+        }
+        if (replacement !== undefined) break
+      }
+    }
+    if (replacement !== undefined) {
+      used.add(i)
+      used.add(partner)
+      reduced.push({
+        num: replacement,
+        den: poly_const(ONE),
+        denominator_factors: [],
+        numerator_factors: [replacement],
+      })
+    }
+  }
+  for (let index = 0; index < remaining.length; index++) {
+    if (!used.has(index)) reduced.push(remaining[index]!)
+  }
+  return reduced
+}
+
 // Cross-multiplied polynomial form of the equation left = right, or undefined
 // if outside the supported fragment.
 const constant_value = (expr: RealExpr): number | undefined => {
@@ -238,23 +416,52 @@ const constant_value = (expr: RealExpr): number | undefined => {
   return undefined
 }
 
-const equation_to_poly = (left: RealExpr, right: RealExpr): Poly | undefined => {
+export type EqRationalRow = {
+  num: Poly
+  den: Poly
+  denominator_factors: Poly[]
+  numerator_factors?: Poly[]
+  // Conditions needed for the polynomial row to be equivalent to the source
+  // equation.  In particular, ite(d=0, 1, n/d)=c with c!=1 requires d!=0.
+  required_conditions?: Constraint[]
+}
+
+const equation_to_rational_row = (left: RealExpr, right: RealExpr): EqRationalRow | undefined => {
   const left_then = left.tag === 'ite' ? constant_value(left.then_expr) : undefined
   const right_lit = constant_value(right)
   if (left.tag === 'ite' && left_then !== undefined && right_lit !== undefined && left_then !== right_lit) {
-    return equation_to_poly(left.else_expr, right)
+    const row = equation_to_rational_row(left.else_expr, right)
+    return row === undefined ? undefined : {
+      ...row,
+      required_conditions: [
+        { tag: 'negation', constraint: left.condition },
+        ...(row.required_conditions ?? []),
+      ],
+    }
   }
 
   const right_then = right.tag === 'ite' ? constant_value(right.then_expr) : undefined
   const left_lit = constant_value(left)
   if (right.tag === 'ite' && right_then !== undefined && left_lit !== undefined && right_then !== left_lit) {
-    return equation_to_poly(left, right.else_expr)
+    const row = equation_to_rational_row(left, right.else_expr)
+    return row === undefined ? undefined : {
+      ...row,
+      required_conditions: [
+        { tag: 'negation', constraint: right.condition },
+        ...(row.required_conditions ?? []),
+      ],
+    }
   }
 
   const l = real_expr_to_polyrat(left)
   const r = real_expr_to_polyrat(right)
   if (l === undefined || r === undefined) return undefined
-  return prat_combine(true, l, r).num
+  const combined = prat_combine(true, l, r)
+  if (combined === undefined) return undefined
+  const num = expand_factors(combined.scale, combined.nums)
+  const den = expand_factors(ONE, combined.dens)
+  if (num === undefined || den === undefined) return undefined
+  return { num, den, denominator_factors: combined.dens, numerator_factors: combined.nums }
 }
 
 // ---------- Successive elimination ----------
@@ -281,7 +488,7 @@ export type EquationElimination =
 // Decompose E = A·v + B where E is linear in v: A = coefficient polynomial
 // (v removed), B = terms without v. Undefined if v occurs with degree ≥ 2 or
 // not at all.
-const linear_in = (e: Poly, v: number): { a: Poly, b: Poly } | undefined => {
+export const linear_in = (e: Poly, v: number): { a: Poly, b: Poly } | undefined => {
   const a: Poly = new Map()
   const b: Poly = new Map()
   for (const t of e.values()) {
@@ -298,7 +505,7 @@ const linear_in = (e: Poly, v: number): { a: Poly, b: Poly } | undefined => {
   return { a, b }
 }
 
-const vars_in_poly = (p: Poly): Set<number> => {
+export const vars_in_poly = (p: Poly): Set<number> => {
   const out = new Set<number>()
   for (const t of p.values()) {
     for (const i of t.mono) out.add(i)
@@ -309,7 +516,7 @@ const vars_in_poly = (p: Poly): Set<number> => {
 // Substitute v = num/den into p (den ≠ 0 generic branch): with p = Σ_k C_k·v^k
 // of v-degree d, the result is Σ_k C_k·num^k·den^(d−k) (p·den^d, same zero set
 // on the branch).
-const substitute_in_poly = (p: Poly, v: number, num: Poly, den: Poly): Poly => {
+export const substitute_in_poly = (p: Poly, v: number, num: Poly, den: Poly): Poly => {
   // Decompose by v-degree.
   const by_degree = new Map<number, Poly>()
   let max_degree = 0
@@ -432,21 +639,27 @@ const eliminate_core = (equations: Poly[], allow_nonconstant_den: boolean): Core
 // equations).
 export const extract_equation_system = (
   constraints: Constraint[],
-): { equation_polys: Poly[], other_conjuncts: Constraint[] } => {
+): { equation_polys: Poly[], equation_rows: EqRationalRow[], other_conjuncts: Constraint[] } => {
   const conjuncts = flatten_conjuncts(constraints)
-  const equation_polys: Poly[] = []
+  const raw_equation_rows: EqRationalRow[] = []
   const other_conjuncts: Constraint[] = []
   for (const c of conjuncts) {
     if (c.tag === 'equal') {
-      const p = equation_to_poly(c.left, c.right)
-      if (p !== undefined) {
-        equation_polys.push(p)
+      const row = equation_to_rational_row(c.left, c.right)
+      if (row !== undefined) {
+        raw_equation_rows.push(row)
+        other_conjuncts.push(...(row.required_conditions ?? []))
         continue
       }
     }
     other_conjuncts.push(c)
   }
-  return { equation_polys, other_conjuncts }
+  const equation_rows = reduce_guarded_complementary_rows(
+    raw_equation_rows,
+    guarded_nonzero_factor_signatures(conjuncts),
+  )
+  const equation_polys = equation_rows.map((row) => row.num)
+  return { equation_polys, equation_rows, other_conjuncts }
 }
 
 // Maple-syntax rendering of a polynomial (variables a1..an, 1-indexed).
@@ -498,6 +711,18 @@ export const eliminate_equations = (
   const residual = [...residual_conjuncts]
   for (const p of outcome.leftover) {
     residual.push({ tag: 'equal', left: poly_to_real_expr(p, (i) => svs([i])), right: lit(0) })
+  }
+  // Every nonconstant pivot describes a localized generic chart. Preserve its
+  // nonzero condition in the residual problem so every downstream backend
+  // searches exactly the branch on which the rational substitution is valid.
+  for (const entry of outcome.chain) {
+    if (!entry.den_is_const) {
+      residual.push({
+        tag: 'not_equal',
+        left: poly_to_real_expr(entry.den, (i) => svs([i])),
+        right: lit(0),
+      })
+    }
   }
 
   return {
@@ -703,15 +928,34 @@ export const reconstruct_full_assignment = (
 
 // ---------- Substitution into residual constraints ----------
 
-const rational_to_real_expr = (q: Rational): RealExpr => {
+export const rational_to_real_expr = (q: Rational): RealExpr => {
+  const exact_literal = (value: bigint): RealExpr => {
+    const number = Number(value)
+    return lit(number, Number.isSafeInteger(number) ? undefined : value.toString())
+  }
   const abs: RealExpr = q.d === 1n
-    ? lit(Number(q.n < 0n ? -q.n : q.n))
-    : divide(lit(Number(q.n < 0n ? -q.n : q.n)), lit(Number(q.d)))
+    ? exact_literal(q.n < 0n ? -q.n : q.n)
+    : divide(exact_literal(q.n < 0n ? -q.n : q.n), exact_literal(q.d))
   return q.n < 0n ? neg(abs) : abs
 }
 
-const poly_to_real_expr = (p: Poly, var_expr: (i: number) => RealExpr): RealExpr => {
-  let result: RealExpr | undefined = undefined
+const balanced_combine = (
+  expressions: RealExpr[],
+  combine: (left: RealExpr, right: RealExpr) => RealExpr,
+): RealExpr => {
+  let level = expressions
+  while (level.length > 1) {
+    const next: RealExpr[] = []
+    for (let i = 0; i < level.length; i += 2) {
+      next.push(i + 1 < level.length ? combine(level[i]!, level[i + 1]!) : level[i]!)
+    }
+    level = next
+  }
+  return level[0]!
+}
+
+export const poly_to_real_expr = (p: Poly, var_expr: (i: number) => RealExpr): RealExpr => {
+  const terms: RealExpr[] = []
   for (const t of p.values()) {
     // Group repeated indices into powers.
     const factors: RealExpr[] = []
@@ -726,10 +970,9 @@ const poly_to_real_expr = (p: Poly, var_expr: (i: number) => RealExpr): RealExpr
       factors.push(j - i === 1 ? base : power(base, lit(j - i)))
       i = j
     }
-    const term = factors.reduce((acc, f) => multiply(acc, f))
-    result = result === undefined ? term : plus(result, term)
+    terms.push(balanced_combine(factors, multiply))
   }
-  return result ?? lit(0)
+  return terms.length === 0 ? lit(0) : balanced_combine(terms, plus)
 }
 
 // Generic substitution: replace every state-variable index in a constraint

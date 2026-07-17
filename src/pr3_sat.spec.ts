@@ -129,6 +129,17 @@ describe('Pr3 probability translation', () => {
 })
 
 describe('Pr3SAT wrapper', () => {
+  test.each(['0', '1/2'])(
+    'direct Z3 preserves the nonzero branch of totalized probability = %s',
+    async (value) => {
+      const constraints = [parse(`Pr(A -> B) = ${value}`), parse('Pr(A) = 0')]
+      const tt = new TruthTable(variables_in_constraints(constraints))
+      const z3 = await init_z3()
+      const result = await pr3_sat_wrapped(new WrappedSolver(z3, init_z3), tt, constraints)
+      expect(result.solver_output.status).toBe('unsat')
+    },
+  )
+
   test('solves a chameleon conjunction constraint with Cooper semantics', async () => {
     const constraints = [parse('Pr((A -> B) & C) > Pr(A -> B)')]
     const tt = new TruthTable(variables_in_constraints(constraints))

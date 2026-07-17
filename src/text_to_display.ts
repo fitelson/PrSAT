@@ -8,7 +8,7 @@ import { FancyEvaluatorOutput, init_z3, ModelAssignmentOutput, pr_sat_wrapped, P
 import { build_rational_cck_evaluator, build_rational_cooper_evaluator, build_rational_evaluator, ProbabilitySemantics, RandomPrSATResult, DEFAULT_SEARCH_ATTEMPTS, RandomSearchOptions } from "./random_search";
 import { CCKTruthTable, table_truth_value } from "./cck";
 import { cck_sat_wrapped, CCKSATResult } from "./cck_sat";
-import { ping_maple_bridge, DEFAULT_MAPLE_BRIDGE_URL } from "./maple_bridge_client";
+import { ping_maple_bridge, random_search_equation_engine_options } from "./maple_bridge_client";
 import { s_to_string } from "./s";
 import { ConstraintOrRealExpr, PrSat } from "./types";
 import { InputBlockLogic } from "./display_logic";
@@ -982,7 +982,7 @@ const display_constraint_or_real_expr = (e: ConstraintOrRealExpr, wrap_in_math_e
 type ModelEvaluator = {
   element: HTMLElement
   // multi_input: MultiInput<ConstraintOrRealExpr>
-  refresh: () => void
+  refresh: () => Promise<void>
 }
 
 // Numeric value of a model assignment, for decimal display. Undefined when no
@@ -1111,7 +1111,7 @@ const model_evaluators = (
 
   show_decimals.watch((decimals) => {
     decimals_button.value = decimals ? 'Fractions' : 'Decimals'
-    refresh().catch((e) => { console.error('decimals toggle refresh failed', e) })
+    void refresh().catch((e) => { console.error('decimals toggle refresh failed', e) })
   })
 
   const element = el('div', { class: 'model-evaluators' },
@@ -1305,10 +1305,25 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
 
   // Local Maple bridge detection (optional; run `npm run maple-bridge`).
   const maple_bridge_available = new Editable(false)
+  const use_maple_bridge = new Editable(false)
+  const maple_bridge_toggle = tel(TestId.solver_method.maple_bridge_toggle, 'input', {
+    type: 'checkbox',
+    disabled: '',
+    style: 'margin-left: 0.4em;',
+  }) as HTMLInputElement
+  maple_bridge_toggle.addEventListener('change', () => {
+    use_maple_bridge.set(maple_bridge_toggle.checked)
+    invalidate()
+  })
   const maple_bridge_indicator = el('span', { style: 'margin-left: 0.4em; font-size: 0.85em; color: #888;' }, 'Maple bridge: checking…')
   const refresh_maple_bridge = () => {
     ping_maple_bridge().then((ok) => {
       maple_bridge_available.set(ok)
+      if (!ok) {
+        maple_bridge_toggle.checked = false
+        use_maple_bridge.set(false)
+      }
+      maple_bridge_toggle.disabled = state2.get().tag === 'looking' || !ok
       maple_bridge_indicator.textContent = ok ? 'Maple bridge: connected' : 'Maple bridge: off'
       maple_bridge_indicator.style.color = ok ? '#1a7f37' : '#888'
     }).catch(() => {})
@@ -1321,6 +1336,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
   const random_options_row = el('div', { style: 'display: none; flex-wrap: wrap; gap: 0.8em; margin-top: 0.2em;' },
     el('label', {}, 'Seed:', seed_input),
     el('label', {}, 'Attempts:', attempts_input),
+    el('label', {}, 'Use Maple bridge:', maple_bridge_toggle),
     maple_bridge_indicator,
   )
   solver_method.watch((m) => {
@@ -1489,10 +1505,10 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
   }
 
   const z3_is_ready_2 = (solver: WrappedSolver) => {
-    generate_button.addEventListener('click', async () => {
+    generate_button.addEventListener('click', () => {
       assert(state2.get().tag !== 'looking', 'Trying to generate another model while looking for stuff!')
       const constraints = assert_exists(constraint_block.get_output(), 'Generate button clicked but not all constraints ready!')
-      await start_search_solver(solver, constraints, is_regular.get())
+      void start_search_solver(solver, constraints, is_regular.get())
     })
     cancel_button.onclick = () => {
       const state = state2.get()
@@ -1583,7 +1599,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
           semantics: semantic_mode,
           seed: random_seed.get() === '' ? undefined : random_seed.get(),
           search_attempts: random_attempts.get(),
-          maple_bridge_url: maple_bridge_available.get() ? DEFAULT_MAPLE_BRIDGE_URL : undefined,
+          ...random_search_equation_engine_options(maple_bridge_available.get(), use_maple_bridge.get()),
         }
         const cancelled: RandomPrSATResult = {
           constraints: { original: constraints, translated: [], extra: [], eliminated: [] },
@@ -1594,18 +1610,27 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
           attempts_used: 0,
           solver_output: { status: 'cancelled' },
         }
-        const on_abort = () => {
+        let settled = false
+        const finish = (result: RandomPrSATResult) => {
+          if (settled) return
+          settled = true
+          abort_controller.signal.removeEventListener('abort', on_abort)
           worker.terminate()
-          resolve(cancelled)
+          resolve(result)
         }
+        const as_exception = (message: string): RandomPrSATResult => ({
+          ...cancelled,
+          smtlib_input: `; error: ${message}`,
+          solver_output: { status: 'exception', message },
+        })
+        const on_abort = () => finish(cancelled)
         abort_controller.signal.addEventListener('abort', on_abort)
         worker.onmessage = (event: MessageEvent) => {
+          if (settled) return
           const msg = event.data
           if (msg.tag === 'translated') {
             on_translated(msg.translated)
           } else if (msg.tag === 'done') {
-            abort_controller.signal.removeEventListener('abort', on_abort)
-            worker.terminate()
             const result: RandomPrSATResult = msg.result
             // Rebuild the non-cloneable evaluator from the exact rational model.
             if (result.solver_output.status === 'sat' && result.rational_model !== undefined) {
@@ -1615,13 +1640,16 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
                   ? build_rational_cck_evaluator(result.rational_model)
                   : build_rational_evaluator(result.rational_model)
             }
-            resolve(result)
+            finish(result)
           } else if (msg.tag === 'error') {
-            abort_controller.signal.removeEventListener('abort', on_abort)
-            worker.terminate()
-            resolve({ ...cancelled, smtlib_input: `; error: ${msg.message}`, solver_output: { status: 'exception', message: msg.message } })
+            finish(as_exception(msg.message))
           }
         }
+        worker.onerror = (event: ErrorEvent) => {
+          event.preventDefault()
+          finish(as_exception(event.message || 'Random Search worker crashed.'))
+        }
+        worker.onmessageerror = () => finish(as_exception('Random Search worker returned an unreadable message.'))
         worker.postMessage({ constraints, variables: truth_table.variables, options })
       })
       const method = solver_method.get()
@@ -1776,7 +1804,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
         if (has_probability_table(state.truth_table)) {
           model_assignments2.set({ truth_table: state.truth_table, values: state.solver_output.solver_output.state_assignments })
           // evaluators.multi_input.refresh()
-          evaluators.refresh()
+          void evaluators.refresh().catch((error) => console.error('Unable to refresh model evaluators', error))
         } else {
           model_assignments2.set(undefined)
         }
@@ -1785,7 +1813,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
       }
     } else if (last_state?.tag !== 'looking' && state.tag === 'looking') {
       start_countdown(timeout_ms.get() / 1000, () => { cancel(state.abort_controller) })
-      evaluators.refresh()
+      void evaluators.refresh().catch((error) => console.error('Unable to refresh model evaluators', error))
     }
     if (last_state?.tag === 'looking' && state.tag !== 'looking') {
       cancel_countdown()
@@ -1799,6 +1827,12 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
     model_part.classList.remove('invalidated')
     cancel_button.disabled = true
     regular_toggle.disabled = state.tag === 'looking'
+    solver_method_select.disabled = state.tag === 'looking'
+    trivalent_toggle.disabled = state.tag === 'looking'
+    trivalent_cck_toggle.disabled = state.tag === 'looking'
+    seed_input.disabled = state.tag === 'looking'
+    attempts_input.disabled = state.tag === 'looking'
+    maple_bridge_toggle.disabled = state.tag === 'looking' || !maple_bridge_available.get()
     for (const input of timeout_input.getElementsByTagName('input')) {
       input.disabled = state.tag === 'looking'
     }
@@ -1809,7 +1843,8 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
       model_part.classList.add('invalidated')
       model_container.innerHTML = ''
       constraints_view.innerHTML = ''
-      generate_button.disabled = false
+      const constraints = constraint_block.get_output()
+      generate_button.disabled = constraints === undefined || constraints.length === 0
     } else if (state.tag === 'looking') {
       state_display.innerHTML = ''
       state_display.append(Constants.SEARCH)
@@ -1840,7 +1875,10 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
           : so.semantics === 'trivalent-cck'
             ? 'Trivalent (CCK) Random Search'
             : 'Random Search'
-        const badge_parts: string[] = [so.used_maple_bridge ? `via ${random_method} + Maple bridge` : `via ${random_method}`]
+        const equation_engine = so.used_browser_equation_solver
+          ? ' + browser algebra'
+          : so.used_maple_bridge ? ' + Maple bridge' : ''
+        const badge_parts: string[] = [`via ${random_method}${equation_engine}`]
         badge_parts.push(`seed: ${so.seed}`)
         badge_parts.push(`attempt ${so.attempts_used}/${so.attempts_used > 0 ? so.attempts_used : 1}`)
         if (so.final_fmin !== undefined && Number.isFinite(so.final_fmin)) {

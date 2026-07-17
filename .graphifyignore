@@ -1,0 +1,18 @@
+node_modules/
+dist/
+graphify-out/
+
+# Generated / vendored assets
+public/z3-built.js
+public/z3-built.wasm
+package-lock.json
+
+# Prose and non-code project notes
+*.md
+*.txt
+*.html
+LICENSE
+CHANGELOG.md
+
+# macOS metadata
+.DS_Store

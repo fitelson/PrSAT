@@ -1,8 +1,10 @@
-import { describe, test } from "vitest"
+import { describe, expect, test } from "vitest"
 import { random_pr_sat_wrapped } from "./random_search"
 import { eliminate_equations } from "./equation_elimination"
-import { constraint_builder, real_expr_builder, sentence_builder, enrich_constraints, translate, TruthTable } from "./pr_sat"
+import { constraint_builder, real_expr_builder, sentence_builder, enrich_constraints, translate, TruthTable, variables_in_constraints } from "./pr_sat"
 import { PrSat } from "./types"
+import { parse_constraint } from './parser'
+import { init_z3, pr_sat_wrapped, WrappedSolver } from './z3_integration'
 
 type Constraint = PrSat['Constraint']
 const { eq, neq } = constraint_builder
@@ -11,6 +13,14 @@ const { letter } = sentence_builder
 
 const d = divide, m = minus
 const half = divide(lit(1), lit(2))
+
+const likelihood_ratio_lines = [
+  '(Pr(H | E1 & E2) - Pr(H | ~E1 & E2)) = (Pr(H | E1) - Pr(H | ~E1))',
+  '(Pr(H | E2 & E1) - Pr(H | ~E2 & E1)) = (Pr(H | E2) - Pr(H | ~E2))',
+  'Pr(H | E1) - Pr(H | ~E1) = 1/2',
+  'Pr(H | E2) - Pr(H | ~E2) = -1/2',
+  'Pr(H | E1 & E2) - Pr(H | ~(E1 & E2)) ≠ 0',
+]
 
 // Branden's system over a_1..a_8 (0-indexed svs), a_8 implicit via sum=1.
 const constraints: Constraint[] = [
@@ -26,6 +36,13 @@ const constraints: Constraint[] = [
 const tt = new TruthTable({ real: [], sentence: [letter('A'), letter('B'), letter('C')] })
 
 describe('likelihood-ratio-difference system (research benchmark)', () => {
+  test('literal PrSAT input parses into the eight-atom benchmark', () => {
+    const parsed = likelihood_ratio_lines.map((line) => parse_constraint(line)[1] as Constraint)
+    expect(parsed).toHaveLength(5)
+    const parsed_tt = new TruthTable(variables_in_constraints(parsed))
+    expect(parsed_tt.n_states()).toBe(8)
+  })
+
   test('elimination structure', () => {
     const translated = translate(tt, constraints)
     const enriched = enrich_constraints(tt, undefined, false, translated)
@@ -37,6 +54,24 @@ describe('likelihood-ratio-difference system (research benchmark)', () => {
                   'residual eqs:', elim.residual_conjuncts.filter(c => c.tag === 'equal').length)
     }
   })
+  test('Random Search preprocessing is available while regular Z3 stays direct', async () => {
+    const parsed = likelihood_ratio_lines.map((line) => parse_constraint(line)[1] as Constraint)
+    const parsed_tt = new TruthTable(variables_in_constraints(parsed))
+    const translated = translate(parsed_tt, parsed)
+    const elimination = eliminate_equations(
+      parsed_tt.n_states(), enrich_constraints(parsed_tt, undefined, true, translated))
+    expect(elimination.tag).toBe('eliminated')
+
+    const z3 = await init_z3()
+    const result = await pr_sat_wrapped(new WrappedSolver(z3, init_z3), parsed_tt, parsed, {
+      regular: true,
+      timeout_ms: 2_000,
+    })
+    expect(result.solver_output.status).toBe('unsat')
+    // Z3 receives the compact original formulation after normalization-state
+    // elimination; equation preprocessing is reserved for Random Search.
+    expect(result.smtlib_input.length).toBeLessThan(3_000)
+  }, 10_000)
   test('random search certifies an exact model (snap-then-re-eliminate + Groebner)', async () => {
     const { expect } = await import('vitest')
     const result = await random_pr_sat_wrapped(tt, constraints, { seed: 'sys-1', search_attempts: 30 })

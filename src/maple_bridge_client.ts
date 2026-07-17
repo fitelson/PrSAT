@@ -11,8 +11,22 @@ import { EqPoly, poly_to_maple_string, vars_in_polys } from './equation_eliminat
 import { parse_maple_expr, default_var_to_index } from './maple_expr'
 
 type RealExpr = PrSat['RealExpr']
+type Constraint = PrSat['Constraint']
 
 export const DEFAULT_MAPLE_BRIDGE_URL = 'http://127.0.0.1:31415'
+export const DEFAULT_MAPLE_REQUEST_TIMEOUT_MS = 125_000
+export const MAX_MAPLE_BRANCHES = 256
+
+export const random_search_equation_engine_options = (
+  bridge_available: boolean,
+  use_maple_bridge: boolean,
+): { browser_equation_solver: boolean, maple_bridge_url?: string } => {
+  const maple_selected = bridge_available && use_maple_bridge
+  return {
+    browser_equation_solver: !maple_selected,
+    maple_bridge_url: maple_selected ? DEFAULT_MAPLE_BRIDGE_URL : undefined,
+  }
+}
 
 export type MapleBranch = {
   // Solved variables: state index → expression over free variables.
@@ -20,6 +34,9 @@ export type MapleBranch = {
   // Free variables of this branch (those Maple returned as `a_i = a_i`,
   // plus any state variable not mentioned at all).
   free: Set<number>
+  // Pure-browser branches carry generic-chart coefficient assumptions.
+  // Maple branches currently leave this absent.
+  conditions?: Constraint[]
 }
 
 export const ping_maple_bridge = async (url: string = DEFAULT_MAPLE_BRIDGE_URL): Promise<boolean> => {
@@ -41,18 +58,27 @@ export const solve_equations_via_maple = async (
   const vars = vars_in_polys(equation_polys).map((i) => `a${i + 1}`)
   if (vars.length === 0) return undefined
   let body: any
+  const request_controller = new AbortController()
+  const on_abort = () => request_controller.abort()
+  if (abort_signal?.aborted) request_controller.abort()
+  else abort_signal?.addEventListener('abort', on_abort, { once: true })
+  const timeout = setTimeout(() => request_controller.abort(), DEFAULT_MAPLE_REQUEST_TIMEOUT_MS)
   try {
     const res = await fetch(`${url}/solve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ vars, equations: equation_polys.map(poly_to_maple_string) }),
-      signal: abort_signal,
+      signal: request_controller.signal,
     })
+    if (!res.ok) return undefined
     body = await res.json()
   } catch {
     return undefined  // bridge unreachable / aborted
+  } finally {
+    clearTimeout(timeout)
+    abort_signal?.removeEventListener('abort', on_abort)
   }
-  if (body?.error !== undefined || !Array.isArray(body?.branches)) return undefined
+  if (body?.error !== undefined || !Array.isArray(body?.branches) || body.branches.length > MAX_MAPLE_BRANCHES) return undefined
 
   const to_index = default_var_to_index(n_states)
   const is_identity = (name: string, expr: string): boolean => expr.trim() === name

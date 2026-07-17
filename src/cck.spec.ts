@@ -92,7 +92,8 @@ describe('Cantwell-Cooper-Kleene trivalent semantics', () => {
     const { equation_polys, other_conjuncts } = extract_equation_system(translated)
 
     expect(equation_polys).toHaveLength(3)
-    expect(other_conjuncts).toHaveLength(1)
+    expect(other_conjuncts).toHaveLength(4)
+    expect(other_conjuncts.filter((constraint) => constraint.tag === 'negation')).toHaveLength(3)
   })
 })
 

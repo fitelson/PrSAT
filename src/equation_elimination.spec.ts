@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { eliminate_equations } from "./equation_elimination"
+import { eliminate_equations, extract_equation_system } from "./equation_elimination"
 import { random_pr_sat } from "./random_search"
 import { constraint_builder, real_expr_builder, sentence_builder, enrich_constraints, translate, TruthTable, variables_in_constraints } from "./pr_sat"
 import { PrSat } from "./types"
@@ -21,6 +21,28 @@ const enriched_for = (constraints: Constraint[]): { n: number, enriched: Constra
 }
 
 describe('eliminate_equations', () => {
+  test('cancels conditional chain-rule factors before polynomial expansion', () => {
+    const chain_rule = eq(
+      pr(and(and(A, B), C)),
+      multiply(multiply(pr(A), cpr(B, A)), cpr(C, and(A, B))),
+    )
+    const { enriched } = enriched_for([chain_rule])
+    // Only the normalization equation remains; the chain rule is an exact
+    // identity once its guarded conditional factors cancel.
+    expect(extract_equation_system(enriched).equation_polys).toHaveLength(1)
+  })
+
+  test('combines guarded complementary cells into one shared factor equation', () => {
+    const constraints = [
+      eq(pr(and(and(A, B), C)), multiply(multiply(pr(A), pr(B)), cpr(C, and(A, B)))),
+      eq(pr(and(and(A, B), not(C))), multiply(multiply(pr(A), pr(B)), cpr(not(C), and(A, B)))),
+    ]
+    const { enriched } = enriched_for(constraints)
+    // Normalization plus one reduced independence equation, rather than two
+    // expanded cell-times-residual equations.
+    expect(extract_equation_system(enriched).equation_polys).toHaveLength(2)
+  })
+
   test('linear equations are fully absorbed', () => {
     // Pr(A) = 1/2 and Pr(B|A) = 1/3 (cross-multiplies to linear) + sum = 1:
     // 3 equations, 4 states → 1 free variable.

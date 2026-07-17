@@ -7,6 +7,7 @@
 // PrSAT.m (lines 962–990, ~960).
 
 import { PrSat } from './types'
+import { MAX_ABS_SOLVER_EXPONENT } from './pr_sat'
 
 type RealExpr = PrSat['RealExpr']
 type Constraint = PrSat['Constraint']
@@ -42,6 +43,16 @@ export const r_from_fraction = (n: number | bigint, d: number | bigint): Rationa
   const bn = typeof n === 'bigint' ? n : BigInt(n)
   const bd = typeof d === 'bigint' ? d : BigInt(d)
   return normalize(bn, bd)
+}
+
+export const r_from_decimal_string = (source: string): Rational => {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(source)
+  if (match === null) throw new Error(`Invalid non-negative decimal literal '${source}'`)
+  const integer = match[1]!
+  const fractional = match[2] ?? ''
+  const numerator = BigInt(`${integer}${fractional}`)
+  const denominator = 10n ** BigInt(fractional.length)
+  return normalize(numerator, denominator)
 }
 
 export const ZERO: Rational = { n: 0n, d: 1n }
@@ -210,6 +221,10 @@ export const evaluate_real_expr_rational = (
     if (exp.value.d !== 1n) {
       return { tag: 'error', reason: `non-integer exponent ${r_to_string(exp.value)} not supported by random search` }
     }
+    const max_exp = BigInt(MAX_ABS_SOLVER_EXPONENT)
+    if (exp.value.n < -max_exp || exp.value.n > max_exp) {
+      return { tag: 'error', reason: `exponent magnitude must be at most ${MAX_ABS_SOLVER_EXPONENT}` }
+    }
     try {
       return { tag: 'ok', value: r_pow_int(base.value, exp.value.n) }
     } catch (e) {
@@ -249,18 +264,18 @@ export const evaluate_constraint_rational = (
   }
   if (c.tag === 'conjunction') {
     const l = sub(c.left); if (l.tag !== 'ok') return l
-    const r = sub(c.right); if (r.tag !== 'ok') return r
-    return { tag: 'ok', value: l.value && r.value }
+    if (!l.value) return { tag: 'ok', value: false }
+    return sub(c.right)
   }
   if (c.tag === 'disjunction') {
     const l = sub(c.left); if (l.tag !== 'ok') return l
-    const r = sub(c.right); if (r.tag !== 'ok') return r
-    return { tag: 'ok', value: l.value || r.value }
+    if (l.value) return { tag: 'ok', value: true }
+    return sub(c.right)
   }
   if (c.tag === 'conditional') {
     const l = sub(c.left); if (l.tag !== 'ok') return l
-    const r = sub(c.right); if (r.tag !== 'ok') return r
-    return { tag: 'ok', value: !l.value || r.value }
+    if (!l.value) return { tag: 'ok', value: true }
+    return sub(c.right)
   }
   if (c.tag === 'biconditional') {
     const l = sub(c.left); if (l.tag !== 'ok') return l

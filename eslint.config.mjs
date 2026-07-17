@@ -6,6 +6,8 @@ export default tseslint.config(
   {
     files: [
       'src/**/*.ts',
+      'tests/**/*.ts',
+      '*.config.ts',
     ],
     languageOptions: {
       parser: tseslint.parser,
@@ -19,6 +21,7 @@ export default tseslint.config(
     },
     rules: {
       '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
     },
   },
 );

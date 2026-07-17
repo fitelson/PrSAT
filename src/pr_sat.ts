@@ -109,6 +109,10 @@ export class LetterSet {
   }
 }
 
+export const MAX_TRUTH_TABLE_STATES = 4096
+export const MAX_TRUTH_TABLE_LETTERS = 12
+export const MAX_ABS_SOLVER_EXPONENT = 1024
+
 export class TruthTable {
   private readonly letter_ids: SentenceMap['letter'][]
   // private readonly state_table: { assignment: Record<string, boolean>, state: Sentence }[]
@@ -119,8 +123,8 @@ export class TruthTable {
 
   constructor(readonly variables: Readonly<VariableLists>) {
     this.letter_ids = [...new LetterSet(variables.sentence)].sort(comp_letters)
-    if (this.letter_ids.length > 12) {
-      throw new Error(`Classical and ERS modes support at most 12 distinct sentence letters (4096 states); received ${this.letter_ids.length}.`)
+    if (this.letter_ids.length > MAX_TRUTH_TABLE_LETTERS) {
+      throw new Error(`Classical and ERS modes support at most ${MAX_TRUTH_TABLE_LETTERS} distinct sentence letters (${MAX_TRUTH_TABLE_STATES} states); received ${this.letter_ids.length}.`)
     }
     this.state_table = TruthTable.enumerate_states(this.letter_ids)
   }
@@ -768,36 +772,113 @@ export const div0_conditions_in_constraint_or_real_expr = (c_or_re: ConstraintOr
   }
 }
 
-export const div0_conditions_in_single_constraint = (c: Constraint): Constraint[] => {
+const signed_integer_literal_value = (expr: RealExpr): number | undefined => {
+  if (expr.tag === 'literal' && Number.isSafeInteger(expr.value)) {
+    return expr.value
+  } else if (expr.tag === 'negative' && expr.expr.tag === 'literal' && Number.isSafeInteger(expr.expr.value)) {
+    return -expr.expr.value
+  }
+  return undefined
+}
+
+export const div0_conditions_in_single_constraint = (c: Constraint, regular: boolean = false): Constraint[] => {
   if (c.tag === 'equal') {
-    return [...div0_conditions_in_real_expr(c.left), ...div0_conditions_in_real_expr(c.right)]
+    return [...div0_conditions_in_real_expr(c.left, regular), ...div0_conditions_in_real_expr(c.right, regular)]
   } else if (c.tag === 'not_equal') {
-    return [...div0_conditions_in_real_expr(c.left), ...div0_conditions_in_real_expr(c.right)]
+    return [...div0_conditions_in_real_expr(c.left, regular), ...div0_conditions_in_real_expr(c.right, regular)]
   } else if (c.tag === 'less_than') {
-    return [...div0_conditions_in_real_expr(c.left), ...div0_conditions_in_real_expr(c.right)]
+    return [...div0_conditions_in_real_expr(c.left, regular), ...div0_conditions_in_real_expr(c.right, regular)]
   } else if (c.tag === 'less_than_or_equal') {
-    return [...div0_conditions_in_real_expr(c.left), ...div0_conditions_in_real_expr(c.right)]
+    return [...div0_conditions_in_real_expr(c.left, regular), ...div0_conditions_in_real_expr(c.right, regular)]
   } else if (c.tag === 'greater_than') {
-    return [...div0_conditions_in_real_expr(c.left), ...div0_conditions_in_real_expr(c.right)]
+    return [...div0_conditions_in_real_expr(c.left, regular), ...div0_conditions_in_real_expr(c.right, regular)]
   } else if (c.tag === 'greater_than_or_equal') {
-    return [...div0_conditions_in_real_expr(c.left), ...div0_conditions_in_real_expr(c.right)]
+    return [...div0_conditions_in_real_expr(c.left, regular), ...div0_conditions_in_real_expr(c.right, regular)]
   } else if (c.tag === 'negation') {
-    return div0_conditions_in_single_constraint(c.constraint)
+    return div0_conditions_in_single_constraint(c.constraint, regular)
   } else if (c.tag === 'conjunction') {
-    return [...div0_conditions_in_single_constraint(c.left), ...div0_conditions_in_single_constraint(c.right)]
+    return [...div0_conditions_in_single_constraint(c.left, regular), ...div0_conditions_in_single_constraint(c.right, regular)]
   } else if (c.tag === 'disjunction') {
-    return [...div0_conditions_in_single_constraint(c.left), ...div0_conditions_in_single_constraint(c.right)]
+    return [...div0_conditions_in_single_constraint(c.left, regular), ...div0_conditions_in_single_constraint(c.right, regular)]
   } else if (c.tag === 'conditional') {
-    return [...div0_conditions_in_single_constraint(c.left), ...div0_conditions_in_single_constraint(c.right)]
+    return [...div0_conditions_in_single_constraint(c.left, regular), ...div0_conditions_in_single_constraint(c.right, regular)]
   } else if (c.tag === 'biconditional') {
-    return [...div0_conditions_in_single_constraint(c.left), ...div0_conditions_in_single_constraint(c.right)]
+    return [...div0_conditions_in_single_constraint(c.left, regular), ...div0_conditions_in_single_constraint(c.right, regular)]
   } else {
     throw new Error('div0_condition_in_single_constraint fallthrough')
   }
 }
 
 // TODO: Write function that just pulls out denominators, then change this family of functions so it just returns the negation of equality to zero or whatever.
-export const div0_conditions_in_real_expr = (expr: RealExpr): Constraint[] => {
+const is_positive_regular_state_sum = (expr: RealExpr): boolean =>
+  expr.tag === 'state_variable_sum' && expr.indices.length > 0
+
+const is_zero_literal = (expr: RealExpr): boolean => expr.tag === 'literal' && expr.value === 0
+
+const is_impossible_regular_zero_test = (constraint: Constraint): boolean =>
+  constraint.tag === 'equal'
+  && ((is_positive_regular_state_sum(constraint.left) && is_zero_literal(constraint.right))
+    || (is_zero_literal(constraint.left) && is_positive_regular_state_sum(constraint.right)))
+
+const simplify_regular_denominators_in_real_expr = (expr: RealExpr): RealExpr => {
+  if (expr.tag === 'negative') {
+    return { ...expr, expr: simplify_regular_denominators_in_real_expr(expr.expr) }
+  }
+  if (expr.tag === 'plus' || expr.tag === 'minus' || expr.tag === 'multiply') {
+    return {
+      ...expr,
+      left: simplify_regular_denominators_in_real_expr(expr.left),
+      right: simplify_regular_denominators_in_real_expr(expr.right),
+    }
+  }
+  if (expr.tag === 'divide') {
+    return {
+      ...expr,
+      numerator: simplify_regular_denominators_in_real_expr(expr.numerator),
+      denominator: simplify_regular_denominators_in_real_expr(expr.denominator),
+    }
+  }
+  if (expr.tag === 'power') {
+    return {
+      ...expr,
+      base: simplify_regular_denominators_in_real_expr(expr.base),
+      exponent: simplify_regular_denominators_in_real_expr(expr.exponent),
+    }
+  }
+  if (expr.tag === 'ite') {
+    if (is_impossible_regular_zero_test(expr.condition)) {
+      return simplify_regular_denominators_in_real_expr(expr.else_expr)
+    }
+    return {
+      ...expr,
+      condition: simplify_regular_denominators_in_constraint(expr.condition),
+      then_expr: simplify_regular_denominators_in_real_expr(expr.then_expr),
+      else_expr: simplify_regular_denominators_in_real_expr(expr.else_expr),
+    }
+  }
+  return expr
+}
+
+const simplify_regular_denominators_in_constraint = (constraint: Constraint): Constraint => {
+  if (constraint.tag === 'negation') {
+    return { ...constraint, constraint: simplify_regular_denominators_in_constraint(constraint.constraint) }
+  }
+  if (constraint.tag === 'conjunction' || constraint.tag === 'disjunction'
+    || constraint.tag === 'conditional' || constraint.tag === 'biconditional') {
+    return {
+      ...constraint,
+      left: simplify_regular_denominators_in_constraint(constraint.left),
+      right: simplify_regular_denominators_in_constraint(constraint.right),
+    }
+  }
+  return {
+    ...constraint,
+    left: simplify_regular_denominators_in_real_expr(constraint.left),
+    right: simplify_regular_denominators_in_real_expr(constraint.right),
+  }
+}
+
+export const div0_conditions_in_real_expr = (expr: RealExpr, regular: boolean = false): Constraint[] => {
   if (expr.tag === 'literal') {
     return []
   } else if (expr.tag === 'variable') {
@@ -810,26 +891,36 @@ export const div0_conditions_in_real_expr = (expr: RealExpr): Constraint[] => {
   } else if (expr.tag === 'state_variable_sum') {
     return []
   } else if (expr.tag === 'negative') {
-    return div0_conditions_in_real_expr(expr.expr)
-  } else if (expr.tag === 'power') { 
-    return div0_conditions_in_real_expr(expr.base)
+    return div0_conditions_in_real_expr(expr.expr, regular)
+  } else if (expr.tag === 'power') {
+    const exponent = signed_integer_literal_value(expr.exponent)
+    return [
+      ...(exponent !== undefined && exponent < 0 && !(regular && is_positive_regular_state_sum(expr.base))
+        ? [cnot(eq(expr.base, lit(0)))] : []),
+      ...div0_conditions_in_real_expr(expr.base, regular),
+      ...div0_conditions_in_real_expr(expr.exponent, regular),
+    ]
   } else if (expr.tag === 'plus') {
-    return [...div0_conditions_in_real_expr(expr.left), ...div0_conditions_in_real_expr(expr.right)]
+    return [...div0_conditions_in_real_expr(expr.left, regular), ...div0_conditions_in_real_expr(expr.right, regular)]
   } else if (expr.tag === 'minus') {
-    return [...div0_conditions_in_real_expr(expr.left), ...div0_conditions_in_real_expr(expr.right)]
+    return [...div0_conditions_in_real_expr(expr.left, regular), ...div0_conditions_in_real_expr(expr.right, regular)]
   } else if (expr.tag === 'multiply') {
-    return [...div0_conditions_in_real_expr(expr.left), ...div0_conditions_in_real_expr(expr.right)]
+    return [...div0_conditions_in_real_expr(expr.left, regular), ...div0_conditions_in_real_expr(expr.right, regular)]
   } else if (expr.tag === 'divide') {
     return [
-      ...(expr.denominator.tag !== 'literal' || expr.denominator.value === 0 ? [cnot(eq(expr.denominator, lit(0)))] : []),
-      ...div0_conditions_in_real_expr(expr.numerator),
-      ...div0_conditions_in_real_expr(expr.denominator),
+      ...(regular && is_positive_regular_state_sum(expr.denominator)
+        ? []
+        : expr.denominator.tag !== 'literal' || expr.denominator.value === 0
+          ? [cnot(eq(expr.denominator, lit(0)))]
+          : []),
+      ...div0_conditions_in_real_expr(expr.numerator, regular),
+      ...div0_conditions_in_real_expr(expr.denominator, regular),
     ]
   } else if (expr.tag === 'ite') {
     return [
-      ...div0_conditions_in_single_constraint(expr.condition),
-      ...div0_conditions_in_real_expr(expr.then_expr).map((c) => constraint_builder.cimp(expr.condition, c)),
-      ...div0_conditions_in_real_expr(expr.else_expr).map((c) => constraint_builder.cimp(constraint_builder.cnot(expr.condition), c)),
+      ...div0_conditions_in_single_constraint(expr.condition, regular),
+      ...div0_conditions_in_real_expr(expr.then_expr, regular).map((c) => constraint_builder.cimp(expr.condition, c)),
+      ...div0_conditions_in_real_expr(expr.else_expr, regular).map((c) => constraint_builder.cimp(constraint_builder.cnot(expr.condition), c)),
     ]
   } else {
     throw new Error('div0_condition_in_real_expr fallthrough')
@@ -848,7 +939,7 @@ const with_definedness = (defined: Constraint[], constraint: Constraint): Constr
   return defined_constraint === undefined ? constraint : cand(defined_constraint, constraint)
 }
 
-const div0_definedness_in_constraint = (constraint: Constraint): Constraint[] => {
+const div0_definedness_in_constraint = (constraint: Constraint, regular: boolean): Constraint[] => {
   if (
     constraint.tag === 'equal' ||
     constraint.tag === 'not_equal' ||
@@ -857,23 +948,23 @@ const div0_definedness_in_constraint = (constraint: Constraint): Constraint[] =>
     constraint.tag === 'greater_than' ||
     constraint.tag === 'greater_than_or_equal'
   ) {
-    return [...div0_conditions_in_real_expr(constraint.left), ...div0_conditions_in_real_expr(constraint.right)]
+    return [...div0_conditions_in_real_expr(constraint.left, regular), ...div0_conditions_in_real_expr(constraint.right, regular)]
   } else if (constraint.tag === 'negation') {
-    return div0_definedness_in_constraint(constraint.constraint)
+    return div0_definedness_in_constraint(constraint.constraint, regular)
   } else if (
     constraint.tag === 'conjunction' ||
     constraint.tag === 'disjunction' ||
     constraint.tag === 'conditional' ||
     constraint.tag === 'biconditional'
   ) {
-    return [...div0_definedness_in_constraint(constraint.left), ...div0_definedness_in_constraint(constraint.right)]
+    return [...div0_definedness_in_constraint(constraint.left, regular), ...div0_definedness_in_constraint(constraint.right, regular)]
   } else {
     return fallthrough('div0_definedness_in_constraint', constraint)
   }
 }
 
-const guard_div0_conditions_in_constraint = (constraint: Constraint): Constraint => {
-  const sub = guard_div0_conditions_in_constraint
+export const guard_div0_conditions_in_constraint = (constraint: Constraint, regular: boolean = false): Constraint => {
+  const sub = (inner: Constraint): Constraint => guard_div0_conditions_in_constraint(inner, regular)
   if (
     constraint.tag === 'equal' ||
     constraint.tag === 'not_equal' ||
@@ -882,9 +973,9 @@ const guard_div0_conditions_in_constraint = (constraint: Constraint): Constraint
     constraint.tag === 'greater_than' ||
     constraint.tag === 'greater_than_or_equal'
   ) {
-    return with_definedness(div0_definedness_in_constraint(constraint), constraint)
+    return with_definedness(div0_definedness_in_constraint(constraint, regular), constraint)
   } else if (constraint.tag === 'negation') {
-    return with_definedness(div0_definedness_in_constraint(constraint.constraint), cnot(constraint.constraint))
+    return with_definedness(div0_definedness_in_constraint(constraint.constraint, regular), cnot(constraint.constraint))
   } else if (constraint.tag === 'conjunction') {
     return cand(sub(constraint.left), sub(constraint.right))
   } else if (constraint.tag === 'disjunction') {
@@ -1036,7 +1127,10 @@ export const eliminate_state_variable_index_in_constraint_or_real_expr = (n_stat
 export const enrich_constraints = (tt: TruthTable, index_to_eliminate: number | undefined, regular: boolean, constraints: Constraint[]): Constraint[] => {
   return [
     ...probability_constraints(tt, index_to_eliminate, regular),
-    ...constraints.map(guard_div0_conditions_in_constraint),
+    ...constraints.map((constraint) => guard_div0_conditions_in_constraint(
+      regular ? simplify_regular_denominators_in_constraint(constraint) : constraint,
+      regular,
+    )),
   ]
 }
 
@@ -1384,13 +1478,6 @@ export const real_expr_to_smtlib = (expr: RealExpr): S => {
     return [real_expr_to_smtlib(expr)]
   }
 
-  const literal_integer_value = (literal: RealExprMap['literal']): number | undefined => {
-    if (!Number.isSafeInteger(literal.value)) {
-      return undefined
-    }
-    return literal.value
-  }
-
   const power_to_smtlib = (base: RealExpr, exponent: RealExpr): S => {
     const base_s = real_expr_to_smtlib(base)
     const product = (factors: S[]): S => {
@@ -1403,16 +1490,13 @@ export const real_expr_to_smtlib = (expr: RealExpr): S => {
       }
     }
 
-    let exp: number | undefined
-    if (exponent.tag === 'literal') {
-      exp = literal_integer_value(exponent)
-    } else if (exponent.tag === 'negative' && exponent.expr.tag === 'literal') {
-      const positive = literal_integer_value(exponent.expr)
-      exp = positive === undefined ? undefined : -positive
-    }
+    const exp = signed_integer_literal_value(exponent)
 
     if (exp === undefined) {
       throw new Error('Exponentiation in solver input requires an integer literal exponent.')
+    }
+    if (Math.abs(exp) > MAX_ABS_SOLVER_EXPONENT) {
+      throw new Error(`Exponent magnitude must be at most ${MAX_ABS_SOLVER_EXPONENT}; received ${exp}.`)
     }
     if (exp < 0) {
       return ['/', '1', product(Array.from({ length: -exp }, () => base_s))]

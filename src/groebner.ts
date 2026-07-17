@@ -98,10 +98,11 @@ const term_times_poly = (coeff: Rational, mono: number[], p: EqPoly): EqPoly => 
 
 // Full normal form of p modulo G (top reduction, then tail reduction by
 // moving irreducible leading terms to the remainder).
-const normal_form = (p0: EqPoly, G: EqPoly[]): EqPoly => {
+const normal_form = (p0: EqPoly, G: EqPoly[], should_stop?: () => boolean): EqPoly | undefined => {
   let p = new Map(p0)
   const remainder = P.zero()
   while (p.size > 0) {
+    if (should_stop?.()) return undefined
     const lt = leading_term(p)!
     let reduced = false
     for (const g of G) {
@@ -133,7 +134,12 @@ const s_polynomial = (f: EqPoly, g: EqPoly): EqPoly => {
   return P.add(a, P.neg(b))
 }
 
-export type GroebnerCaps = { max_pairs: number, max_basis: number, max_terms: number }
+export type GroebnerCaps = {
+  max_pairs: number
+  max_basis: number
+  max_terms: number
+  should_stop?: () => boolean
+}
 export const DEFAULT_GROEBNER_CAPS: GroebnerCaps = { max_pairs: 3000, max_basis: 64, max_terms: 3000 }
 
 // Buchberger with the product (coprime-LT) criterion. Returns the reduced
@@ -146,12 +152,14 @@ export const groebner_basis = (F: EqPoly[], caps: GroebnerCaps = DEFAULT_GROEBNE
   }
   let processed = 0
   while (pairs.length > 0) {
+    if (caps.should_stop?.()) return undefined
     if (++processed > caps.max_pairs) return undefined
     const [i, j] = pairs.shift()!
     const lti = leading_term(G[i]!)!, ltj = leading_term(G[j]!)!
     // Product criterion: coprime leading monomials reduce to zero.
     if (mono_equal(mono_lcm(lti.mono, ltj.mono), mono_mul(lti.mono, ltj.mono))) continue
-    const s = normal_form(s_polynomial(G[i]!, G[j]!), G)
+    const s = normal_form(s_polynomial(G[i]!, G[j]!), G, caps.should_stop)
+    if (s === undefined) return undefined
     if (s.size === 0) continue
     if (s.size > caps.max_terms || G.length >= caps.max_basis) return undefined
     const s_monic = poly_monic(s)
@@ -167,7 +175,13 @@ export const groebner_basis = (F: EqPoly[], caps: GroebnerCaps = DEFAULT_GROEBNE
       && !(j > i && mono_equal(leading_term(g)!.mono, lti.mono)))
     if (!dominated) kept.push(G[i]!)
   }
-  return kept.map((g) => poly_monic(normal_form(g, kept.filter((h) => h !== g)))).filter((g) => g.size > 0)
+  const reduced: EqPoly[] = []
+  for (const g of kept) {
+    const normal = normal_form(g, kept.filter((h) => h !== g), caps.should_stop)
+    if (normal === undefined) return undefined
+    if (normal.size > 0) reduced.push(poly_monic(normal))
+  }
+  return reduced
 }
 
 // ---------- Rational roots of a univariate polynomial ----------

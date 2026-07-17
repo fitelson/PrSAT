@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest"
 
 import { Random } from "./random"
 import { assert, assert_exists } from "./utils"
-import { evaluate_constraint_2, a2eid, combine_inverse, constraint_builder, constraint_to_smtlib, constraints_to_smtlib_lines, eliminate_state_variable_index_in_svs, enrich_constraints, evaluate_real_expr, evaluate_real_expr_2, evaluate_sentence, parse_s, random_letters_and_assignments, real_expr_to_smtlib, real_expr_to_string, RealExprFuzzer, recursively_evaluate_sentence, SentenceFuzzer, state_from_index, translate, translate_constraint, translate_real_expr, TruthTable, constraint_to_string, evaluate_constraint, ConstraintFuzzer, free_real_variables_in_constraint_or_real_expr, variables_in_constraints } from "./pr_sat"
+import { evaluate_constraint_2, a2eid, combine_inverse, constraint_builder, constraint_to_smtlib, constraints_to_smtlib_lines, eliminate_state_variable_index_in_svs, enrich_constraints, evaluate_real_expr, evaluate_real_expr_2, evaluate_sentence, parse_s, random_letters_and_assignments, real_expr_builder, real_expr_to_smtlib, real_expr_to_string, RealExprFuzzer, recursively_evaluate_sentence, SentenceFuzzer, state_from_index, translate, translate_constraint, translate_real_expr, TruthTable, constraint_to_string, evaluate_constraint, ConstraintFuzzer, free_real_variables_in_constraint_or_real_expr, variables_in_constraints } from "./pr_sat"
 import { PrSat, PrSatFuncs as PrSatUtils, SentenceMap } from "./types"
 
 type Sentence = PrSat['Sentence']
@@ -432,6 +432,35 @@ describe('*_to_smtlib', () => {
       ],
       ['=', ['+', 'a_1', 'a_2'], '0'],
     ])
+  })
+  test('regularity omits redundant nonzero guards for probability denominators', () => {
+    const [A, B] = [letter({ id: 'A', index: 0 }), letter({ id: 'B', index: 0 })]
+    const tt = make_tt([A, B])
+    const constraint = eq(cpr({ arg: A, given: B }), lit({ value: 1 }))
+    const [guarded] = enrich_constraints(tt, tt.n_states() - 1, true, translate(tt, [constraint])).slice(-1)
+    expect(constraint_to_smtlib(guarded)).toEqual([
+      '=',
+      ['/', 'a_1', ['+', 'a_1', 'a_3']],
+      '1',
+    ])
+  })
+  test('regularity removes totalized zero-denominator branches for positive state sums', () => {
+    const A = letter({ id: 'A', index: 0 })
+    const tt = make_tt([A])
+    const denominator = real_expr_builder.svs([0])
+    const totalized = real_expr_builder.ite(
+      eq(denominator, lit({ value: 0 })),
+      lit({ value: 1 }),
+      real_expr_builder.divide(lit({ value: 1 }), denominator),
+    )
+    const [simplified] = enrich_constraints(
+      tt,
+      tt.n_states() - 1,
+      true,
+      [eq(totalized, lit({ value: 1 }))],
+    ).slice(-1)
+
+    expect(constraint_to_smtlib(simplified)).toEqual(['=', ['/', '1', 'a_1'], '1'])
   })
   test('free real variables are collected and declared', () => {
     const constraint = eq(pr({ arg: letter({ id: 'A', index: 0 }) }), vbl({ id: 'x' }))

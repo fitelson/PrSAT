@@ -2,6 +2,7 @@ import {
   constraint_builder,
   real_expr_builder,
   sentence_builder,
+  MAX_TRUTH_TABLE_STATES,
   TruthTable,
   VariableLists,
 } from './pr_sat'
@@ -13,6 +14,8 @@ type RealExpr = PrSat['RealExpr']
 type Constraint = PrSat['Constraint']
 
 export type CCKTruthValue = 0 | 0.5 | 1
+
+export const MAX_CCK_TRUTH_TABLE_LETTERS = Math.floor(Math.log(MAX_TRUTH_TABLE_STATES) / Math.log(3))
 
 export type CCKValueSets = {
   true_indices: number[]
@@ -57,6 +60,9 @@ export class CCKTruthTable extends TruthTable {
   constructor(variables: Readonly<VariableLists>) {
     super(variables)
     this.cck_letter_ids = Array.from(super.letters())
+    if (this.cck_letter_ids.length > MAX_CCK_TRUTH_TABLE_LETTERS) {
+      throw new Error(`CCK mode supports at most ${MAX_CCK_TRUTH_TABLE_LETTERS} distinct sentence letters (${Math.pow(3, MAX_CCK_TRUTH_TABLE_LETTERS)} states); received ${this.cck_letter_ids.length}.`)
+    }
   }
 
   private letter_offset(l: SentenceMap['letter']): number {

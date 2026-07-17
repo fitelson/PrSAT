@@ -3,17 +3,12 @@ import * as TestId from './test_ids'
 import * as Constants from '../src/constants'
 import { fallthrough } from '../src/utils'
 
-const URL = 'http://localhost:5173/'
+const URL = 'http://127.0.0.1:5174/'
 const DEFAULT_TIMEOUT = 20_000
 
 const to_load = async (page: Page): Promise<void> => {
   await page.goto(URL)
   await expect(page.getByTestId(TestId.z3_status)).toBeEmpty({ timeout: DEFAULT_TIMEOUT })
-}
-
-const expect_state_display = async (page: Page, text: string, timeout_ms?: number): Promise<void> => {
-  const state_display = page.getByTestId(TestId.state_display_id)
-  await expect(state_display).toContainText(text, { timeout: timeout_ms })
 }
 
 const find_model = async (page: Page, with_result: 'sat' | 'unsat' | 'unknown' | 'cancelled', timeout_ms?: number) => {
@@ -92,18 +87,74 @@ test('random search returns unknown for irrational constraint', async ({ page })
   await expect(page.getByText(Constants.UNKNOWN)).toBeVisible({ timeout: DEFAULT_TIMEOUT })
 })
 
-test('solver dropdown hides random options when Z3 is selected', async ({ page }) => {
+test('solver dropdown shows options only for Random Search', async ({ page }) => {
+  await page.route('http://127.0.0.1:31415/ping', async (route) => await route.abort())
   await to_load(page)
 
   // Default: Z3 selected, random options hidden.
   await expect(page.getByTestId(TestId.solver_method.seed_input)).not.toBeVisible()
+  const maple_bridge = page.getByTestId(TestId.solver_method.maple_bridge_toggle)
+  await expect(maple_bridge).not.toBeVisible()
 
   const solver_select = page.getByTestId(TestId.solver_method.select)
   await solver_select.selectOption('random')
   await expect(page.getByTestId(TestId.solver_method.seed_input)).toBeVisible()
+  await expect(maple_bridge).toBeVisible()
+  await expect(maple_bridge).not.toBeChecked()
+  await expect(maple_bridge).toBeDisabled()
 
   await solver_select.selectOption('z3')
   await expect(page.getByTestId(TestId.solver_method.seed_input)).not.toBeVisible()
+  await expect(maple_bridge).not.toBeVisible()
+})
+
+test('Maple bridge can be selected only when it is connected', async ({ page }) => {
+  await page.route('http://127.0.0.1:31415/ping', async (route) => await route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    headers: { 'Access-Control-Allow-Origin': '*' },
+    body: JSON.stringify({ ok: true }),
+  }))
+  await to_load(page)
+  await page.getByTestId(TestId.solver_method.select).selectOption('random')
+  const maple_bridge = page.getByTestId(TestId.solver_method.maple_bridge_toggle)
+  await expect(maple_bridge).toBeEnabled()
+  await expect(maple_bridge).not.toBeChecked()
+  await maple_bridge.check()
+  await expect(maple_bridge).toBeChecked()
+})
+
+test('editing a parsed constraint immediately disables stale solving', async ({ page }) => {
+  await to_load(page)
+  const test_ids = TestId.generic_multi_input('constraints')
+  const input = page.getByTestId(test_ids.split.single.get(0)).getByTestId(test_ids.split.input)
+  const find_button = page.getByTestId(TestId.find_model)
+
+  await input.fill('Pr(A) = 1/2')
+  await page.waitForTimeout(Constants.DEFAULT_DEBOUNCE_MS + 50)
+  await expect(find_button).toBeEnabled()
+
+  await input.fill('this is not a constraint')
+  await expect(find_button).toBeDisabled()
+})
+
+test('Random Search short-circuits an undefined disjunct', async ({ page }) => {
+  await to_load(page)
+  const test_ids = TestId.generic_multi_input('constraints')
+  const input = page.getByTestId(test_ids.split.single.get(0)).getByTestId(test_ids.split.input)
+  await input.fill('(1 = 1) ∨ (1 / 0 = 0)')
+  await page.getByTestId(TestId.solver_method.select).selectOption('random')
+  await find_model(page, 'sat')
+})
+
+test('CCK rejects a truth table that exceeds the local resource limit', async ({ page }) => {
+  await to_load(page)
+  const test_ids = TestId.generic_multi_input('constraints')
+  const input = page.getByTestId(test_ids.split.single.get(0)).getByTestId(test_ids.split.input)
+  await input.fill('Pr(A & B & C & D & E & F & G & H) = 1')
+  await page.getByTestId(TestId.solver_method.trivalent_cck_toggle).check()
+  await page.getByTestId(TestId.find_model).click()
+  await expect(page.getByTestId(TestId.state_display_id)).toContainText('CCK mode supports at most 7')
 })
 
 test('trivalent toggle runs through the visible selector', async ({ page }) => {
@@ -216,7 +267,7 @@ test('weird model', async ({ page }) => {
   const single_inputs: Locator[] = []
   const test_ids = TestId.generic_multi_input('constraints')
 
-  page.getByTestId(TestId.regular_toggle).check()
+  await page.getByTestId(TestId.regular_toggle).check()
 
   single_inputs.push(page.getByTestId(test_ids.split.single.get(0)))
   await expect(single_inputs[0]).toBeVisible()
@@ -355,6 +406,13 @@ const MEDIUM_SOLVE: string[] = [
   'Pr(B & C) = Pr(B) * Pr(C)',
   'Pr(A & B & C) ≠ Pr(A) * Pr(B) * Pr(C)',
 ]
+const LIKELIHOOD_RATIO_SOLVE: string[] = [
+  '(Pr(H | E1 & E2) - Pr(H | ~E1 & E2)) = (Pr(H | E1) - Pr(H | ~E1))',
+  '(Pr(H | E2 & E1) - Pr(H | ~E2 & E1)) = (Pr(H | E2) - Pr(H | ~E2))',
+  'Pr(H | E1) - Pr(H | ~E1) = 1/2',
+  'Pr(H | E2) - Pr(H | ~E2) = -1/2',
+  'Pr(H | E1 & E2) - Pr(H | ~(E1 & E2)) != 0',
+]
 const SUPER_LONG_SOLVE: string[] = [
   'Pr(X & Y) = Pr(X) * Pr(Y)',
   'Pr(X & Z) = Pr(X) * Pr(Z)',
@@ -370,13 +428,30 @@ const SUPER_LONG_SOLVE: string[] = [
 ]
 const SHORT_WAIT_MS = 50
 
-test.skip('cancelling shows cancel message', async ({ page }) => {
+test('direct Z3 preserves the fast regular likelihood-ratio UNSAT result', async ({ page }) => {
+  await to_load(page)
+  await set_block_input(page, TestId.generic_multi_input('constraints'), LIKELIHOOD_RATIO_SOLVE)
+  await page.getByTestId(TestId.regular_toggle).check()
+  await find_model(page, 'unsat', 10_000)
+})
+
+test('direct ERS Z3 preserves totalized zero-denominator semantics', async ({ page }) => {
+  await to_load(page)
+  await set_block_input(page, TestId.generic_multi_input('constraints'), [
+    'Pr(A -> B) = 0',
+    'Pr(A) = 0',
+  ])
+  await page.getByTestId(TestId.solver_method.trivalent_toggle).check()
+  await find_model(page, 'unsat', 10_000)
+})
+
+test('cancelling shows cancel message', async ({ page }) => {
   await to_load(page)
 
   const constraint_test_ids = TestId.generic_multi_input('constraints')
   await set_block_input(page, constraint_test_ids, LONGISH_SOLVE)
 
-  find_model(page, 'cancelled').catch((e) => { throw e })
+  await find_model(page, 'cancelled')
   await page.waitForTimeout(SHORT_WAIT_MS)
   await cancel_solve(page, 20 * 1000)
 })
@@ -466,14 +541,14 @@ test('disable all input elements during solve', async ({ page }) => {
   await expect_multi_input_block_disabled(constraint_block, true)
 })
 
-test.skip('re-enable all input elements on cancel', async ({ page }) => {
+test('re-enable all input elements on cancel', async ({ page }) => {
   await to_load(page)
 
   const constraint_test_ids = TestId.generic_multi_input('constraints')
   const constraint_input_array = LONGISH_SOLVE
   await set_block_input(page, constraint_test_ids, constraint_input_array)
 
-  find_model(page, 'cancelled').catch((e) => { throw e })
+  await find_model(page, 'cancelled')
   await page.waitForTimeout(SHORT_WAIT_MS)
   await cancel_solve(page, Constants.CANCEL_OVERRIDE_TIMEOUT_MS + 10 * 1000)  // Boooo!
 
@@ -568,6 +643,8 @@ test('eval during 2nd solve says no model then updates correctly with model', { 
   await set_block_input(page, constraint_test_ids, constraint_input_array)
   await find_model(page, 'sat')
 
+  // The second direct Z3 call remains in flight long enough to inspect the
+  // no-model state.
   const constraint_input_array2 = MEDIUM_SOLVE
   await set_block_input(page, constraint_test_ids, constraint_input_array2)
   const second_solve = find_model(page, 'sat', solve_timeout_s * 1000)
