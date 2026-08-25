@@ -7,18 +7,18 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="./assets/index-DLdujlQG.js"></script>
+    <script type="module" crossorigin src="./assets/index-CoKmWIVp.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-Dpw7OOFx.css">
   </head>
   <body>
     <!-- Remove if building for anything but GitHub Pages! (needed for GH Pages though) -->
     <script src="coi-serviceworker.js"></script>
-    <script src="z3-built.js?v=4.16.0"></script>
+    <script src="z3-built.js?v=5.2.0"></script>
     <script>
       const browserInitZ3 = globalThis.initZ3;
       globalThis.global = {
         initZ3: () => browserInitZ3({
-          locateFile: (path) => path === 'z3-built.wasm' ? `${path}?v=4.16.0` : path,
+          locateFile: (path) => path === 'z3-built.wasm' ? `${path}?v=5.2.0` : path,
         }),
       };
     </script>
