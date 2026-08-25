@@ -30,8 +30,10 @@ original design document.
   agents intentionally launch stable wrapper scripts in `~/Library/LaunchAgents/`
   (`org.fitelson.prsat31.web.zsh`, `org.fitelson.prsat31.maple.zsh`) rather than
   `/opt/homebrew/bin/node` directly, because Homebrew Node upgrades can stale
-  launchd's cached code requirement and break restart. After `npm run build`,
-  the bookmark serves the new build immediately. Logs: `~/Library/Logs/prsat31/`.
+  launchd's cached code requirement and break restart. Because launchd cannot
+  reliably read executable code from Dropbox, `npm run install-local-web`
+  builds and stages the app under `~/Library/Application Support/PrSAT31/`,
+  then restarts and checks the service. Logs: `~/Library/Logs/prsat31/`.
 - **Port ownership is permanent:** port 5317 is reserved exclusively for the
   always-on built app. Never use, stop, replace, or repurpose 5317 for debugging,
   Vite, previews, tests, or temporary servers. Development/debugging uses 5173,

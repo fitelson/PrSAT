@@ -229,10 +229,14 @@ graphify update .
 
 Repaired the permanent local PrSAT 3.1 services:
 
-- `http://localhost:5317/` serves the built app from `dist/` via `maple_bridge/serve_dist.mjs`.
+- `http://localhost:5317/` serves the staged build under
+  `~/Library/Application Support/PrSAT31/`; run `npm run install-local-web`
+  after changing the source build.
 - `http://localhost:31415/ping` checks the optional local Maple bridge.
 - `org.fitelson.prsat31.web` and `org.fitelson.prsat31.maple` now launch `/bin/zsh` wrapper scripts in `~/Library/LaunchAgents/`.
-- The wrappers then run `/opt/homebrew/bin/node` on the repo scripts.
+- The web wrapper runs `/opt/homebrew/bin/node` on the staged server script,
+  avoiding launchd's Dropbox privacy restriction. The Maple wrapper remains
+  separate.
 
 This avoids launchd directly caching a code requirement for Homebrew's changing `node` symlink, which broke after a Node upgrade. Verified `5317/` and `5317/z3-built.wasm` return `200 OK`, and Maple bridge `/ping` returns `{ "ok": true, ... }`.
 

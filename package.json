@@ -13,7 +13,8 @@
     "test:e2e": "playwright test --project chromium",
     "test": "npm run test:unit && npm run test:e2e",
     "test-single": "vitest --allowOnly",
-    "maple-bridge": "node maple_bridge/server.mjs"
+    "maple-bridge": "node maple_bridge/server.mjs",
+    "install-local-web": "zsh scripts/install_local_web.zsh"
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",
