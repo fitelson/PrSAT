@@ -1,49 +1,221 @@
 TWISTPRSAT THEOREM CHALLENGES
 
-Each numbered file below is separately loadable in TwistPrSAT.  It states the
-negation of a theorem or proposition from the paper.  Select SMT (Z3), load one
-file from the `theorems` folder, and press Find Model.  The expected result is
-UNSAT: no probability model is a counterexample to the stated result.
+Source paper:
+  V. Borja Macias, M. E. Coniglio, and A. Hernandez-Tello,
+  "Probabilities beyond Belnap-Dunn logic: dealing with gaps, gluts and
+  reliability," arXiv:2608.20228v1.
+
+HOW TO USE THIS PACK
+
+Each numbered file below is separately loadable in TwistPrSAT.  Each file
+asserts that a theorem from the paper fails.  Select SMT (Z3), load one file
+from the `theorems` folder, and press Find Model.  The expected result is
+UNSAT.  An UNSAT result means that there is no LET_K+ probability model that
+is a counterexample to the encoded theorem.
+
+Notation used below:
+  ~A       is the paper's De Morgan negation, not A.
+  oA       is the reliability/classicality formula, circle A.
+  cnot A   is the paper's classical negation, sim A, defined as A -> false.
+  Pr(A)    is the paper's one-dimensional probability p(A).
+
+For the region-decomposition results, the six regions induced by A are:
+  B°_A = A & oA                         reliable belief
+  B_A  = A & cnot (~A v oA)             belief
+  C_A  = A & ~A                         conflict
+  D_A  = ~A & cnot (A v oA)             disbelief
+  D°_A = ~A & oA                        reliable disbelief
+  U_A  = cnot (A v ~A)                  uncertainty
+
 
 01_reliable_contradiction_unsat.txt
-  Proposition 4(3): p(A & ~A & oA) = 0.
-  Challenge: Pr(A & ~A & oA) > 0
+
+  Paper result:
+    Proposition 4(3).  For every formula phi and every LET_K+ probability
+    function p,
+
+      p(phi & ~phi & ophi) = 0.
+
+    The formula phi & ~phi & ophi is a bottom particle: reliability excludes
+    a state that both supports and rejects phi.
+
+  Instance tested:
+      p(A & ~A & oA) = 0.
+
+  Negated challenge loaded into TwistPrSAT:
+      Pr(A & ~A & oA) > 0
+
+  Expected result: UNSAT.
+
 
 02_reliability_bound_unsat.txt
-  Proposition 4(4): p(oA) <= p(A v ~A).
-  Challenge: Pr(oA) > Pr(A v ~A)
+
+  Paper result:
+    Proposition 4(4).  For every formula phi,
+
+      p(ophi) <= p(phi v ~phi).
+
+    This follows from the LET_K+ inference ophi entails phi v ~phi and the
+    monotonicity of p.
+
+  Instance tested:
+      p(oA) <= p(A v ~A).
+
+  Negated challenge loaded into TwistPrSAT:
+      Pr(oA) > Pr(A v ~A)
+
+  Expected result: UNSAT.
+
 
 03_classical_negation_complement_unsat.txt
-  Proposition 4(7): p(cnot A) = 1 - p(A).
-  Challenge: Pr(cnot A) != 1 - Pr(A)
+
+  Paper result:
+    Proposition 4(7).  If cnot phi is the classical negation of phi, then
+
+      p(cnot phi) = 1 - p(phi).
+
+    Unlike the De Morgan negation ~, cnot forms a genuine Boolean complement.
+
+  Instance tested:
+      p(cnot A) = 1 - p(A).
+
+  Negated challenge loaded into TwistPrSAT:
+      Pr(cnot A) != 1 - Pr(A)
+
+  Expected result: UNSAT.
+
 
 04_inclusion_exclusion_unsat.txt
-  Definition 10, Ax1.4: p(A)+p(B) = p(A & B)+p(A v B).
-  Challenge: Pr(A) + Pr(B) != Pr(A & B) + Pr(A v B)
+
+  Paper result:
+    Definition 10, Ax1.4.  For all formulas phi and psi,
+
+      p(phi) + p(psi) = p(phi & psi) + p(phi v psi).
+
+    This is the inclusion-exclusion axiom for the positive extensions of the
+    two formulas.
+
+  Instance tested:
+      p(A) + p(B) = p(A & B) + p(A v B).
+
+  Negated challenge loaded into TwistPrSAT:
+      Pr(A) + Pr(B) != Pr(A & B) + Pr(A v B)
+
+  Expected result: UNSAT.
+
 
 05_positive_region_decomposition_unsat.txt
-  Corollary 3 / the P1-to-P6 translation: positive mass is B° plus B
-  plus C.
-  Challenge: Pr(A) != Pr(A & oA) + Pr(A & cnot (~A v oA)) + Pr(A & ~A)
+
+  Paper result:
+    Corollary 3, the translation from P1 to P6.  The positive probability of
+    phi is the sum of reliable-belief, belief, and conflict mass:
+
+      p(phi) = p(phi_B°) + p(phi_B) + p(phi_C).
+
+  Instance tested using the region formulas displayed above:
+      p(A) = p(A & oA)
+             + p(A & cnot (~A v oA))
+             + p(A & ~A).
+
+  Negated challenge loaded into TwistPrSAT:
+      Pr(A) != Pr(A & oA) + Pr(A & cnot (~A v oA)) + Pr(A & ~A)
+
+  Expected result: UNSAT.
+
 
 06_negative_region_decomposition_unsat.txt
-  Corollary 3 / the P1-to-P6 translation: negative mass is D° plus D
-  plus C.
-  Challenge: Pr(~A) != Pr(~A & oA) + Pr(~A & cnot (A v oA)) + Pr(A & ~A)
+
+  Paper result:
+    Corollary 3, the translation from P1 to P6.  The negative probability of
+    phi, namely p(~phi), is the sum of reliable-disbelief, disbelief, and
+    conflict mass:
+
+      p(~phi) = p(phi_D°) + p(phi_D) + p(phi_C).
+
+  Instance tested:
+      p(~A) = p(~A & oA)
+              + p(~A & cnot (A v oA))
+              + p(A & ~A).
+
+  Negated challenge loaded into TwistPrSAT:
+      Pr(~A) != Pr(~A & oA) + Pr(~A & cnot (A v oA)) + Pr(A & ~A)
+
+  Expected result: UNSAT.
+
 
 07_reliability_region_decomposition_unsat.txt
-  Corollary 2: reliability mass is B° plus D°.
-  Challenge: Pr(oA) != Pr(A & oA) + Pr(~A & oA)
+
+  Paper result:
+    Corollary 2, the translation between P3 and P6.  The reliability
+    coordinate is the sum of reliable-belief and reliable-disbelief mass:
+
+      p(ophi) = p(phi_B°) + p(phi_D°).
+
+  Instance tested:
+      p(oA) = p(A & oA) + p(~A & oA).
+
+  Negated challenge loaded into TwistPrSAT:
+      Pr(oA) != Pr(A & oA) + Pr(~A & oA)
+
+  Expected result: UNSAT.
+
 
 08_six_region_partition_unsat.txt
-  Definition 12, Ax6.3 / Proposition 2: the six region probabilities sum to 1.
-  Challenge: the displayed six-term sum is not 1.
+
+  Paper result:
+    Proposition 2 and Definition 12, Ax6.3.  The six regions B°, B, C, D, D°,
+    and U form a partition, so their probabilities sum to 1:
+
+      p(phi_B°) + p(phi_B) + p(phi_C)
+        + p(phi_D) + p(phi_D°) + p(phi_U) = 1.
+
+  Instance tested:
+      p(A & oA)
+        + p(A & cnot (~A v oA))
+        + p(A & ~A)
+        + p(~A & cnot (A v oA))
+        + p(~A & oA)
+        + p(cnot (A v ~A)) = 1.
+
+  Negated challenge loaded into TwistPrSAT:
+      The same six-term sum != 1.
+
+  Expected result: UNSAT.
+
 
 09_entailment_identity_unsat.txt
-  Proposition 4(8): if psi entails phi, then p(phi & psi)=p(psi).
-  Here psi is A & B and phi is A.
-  Challenge: Pr(A & (A & B)) != Pr(A & B)
+
+  Paper result:
+    Proposition 4(8).  For all formulas phi and psi, if psi entails phi, then
+
+      p(phi & psi) = p(psi).
+
+  Instance tested:
+    Let psi be A & B and let phi be A.  Since A & B entails A, the theorem
+    gives
+
+      p(A & (A & B)) = p(A & B).
+
+  Negated challenge loaded into TwistPrSAT:
+      Pr(A & (A & B)) != Pr(A & B)
+
+  Expected result: UNSAT.
+
 
 10_classical_difference_identity_unsat.txt
-  Proposition 4(9): p(phi & cnot psi)=p(phi)-p(phi & psi).
-  Challenge: Pr(A & cnot B) != Pr(A) - Pr(A & B)
+
+  Paper result:
+    Proposition 4(9).  For all formulas phi and psi,
+
+      p(phi & cnot psi) = p(phi) - p(phi & psi).
+
+    This is the ordinary difference identity for the classical complement of
+    psi; it does not replace cnot psi with the De Morgan negation ~psi.
+
+  Instance tested:
+      p(A & cnot B) = p(A) - p(A & B).
+
+  Negated challenge loaded into TwistPrSAT:
+      Pr(A & cnot B) != Pr(A) - Pr(A & B)
+
+  Expected result: UNSAT.
