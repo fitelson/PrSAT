@@ -1,0 +1,183 @@
+TWISTPRSAT: ALL EXAMPLES
+
+Source paper:
+  V. Borja Macias, M. E. Coniglio, and A. Hernandez-Tello,
+  "Probabilities beyond Belnap-Dunn logic: dealing with gaps, gluts and
+  reliability," arXiv:2608.20228v1.
+
+HOW TO USE THIS FILE
+
+This master file contains both SAT and UNSAT examples.  Do not load the whole
+file at once.  Copy the constraint lines from one numbered block into
+TwistPrSAT, or load the corresponding ready-to-load file named in that block.
+
+Notation:
+  ~A       De Morgan negation
+  oA       reliability/classicality
+  cnot A   classical negation, defined as A -> false
+  Pr(A)    positive probability of A
+
+Select SMT (Z3) for every UNSAT challenge.  Random Search can certify SAT by
+returning an exact rational witness, but an unsuccessful random search means
+unknown rather than UNSAT.
+
+
+EXAMPLE 00: UNIFORM SIX-REGION MODEL
+File: TwistPrSAT_examples.txt
+Expected result: SAT in Z3 and Random Search.
+
+This model assigns probability 1/6 to each of the six regions B°, B, C, D, D°,
+and U.  The remaining lines check the derived positive, negative, reliability,
+excluded-middle, classical-complement, and conditional probabilities.
+
+Pr(A & oA) = 1/6
+Pr(A & cnot (~A v oA)) = 1/6
+Pr(A & ~A) = 1/6
+Pr(~A & cnot (A v oA)) = 1/6
+Pr(~A & oA) = 1/6
+Pr(cnot (A v ~A)) = 1/6
+Pr(A) = 1/2
+Pr(~A) = 1/2
+Pr(oA) = 1/3
+Pr(A v ~A) = 5/6
+Pr(cnot A) = 1/2
+Pr(oA | A) = 1/3
+Pr(~A | A) = 1/3
+
+
+EXAMPLE 01: RELIABLE CONTRADICTION IS IMPOSSIBLE
+File: theorems/01_reliable_contradiction_unsat.txt
+Paper result: Proposition 4(3), p(phi & ~phi & ophi) = 0.
+Expected result: UNSAT.
+
+Pr(A & ~A & oA) > 0
+
+
+EXAMPLE 02: RELIABILITY EXCLUDES A GAP
+File: theorems/02_reliability_bound_unsat.txt
+Paper result: Proposition 4(4), p(ophi) <= p(phi v ~phi).
+Expected result: UNSAT.
+
+Pr(oA) > Pr(A v ~A)
+
+
+EXAMPLE 03: CLASSICAL NEGATION IS A COMPLEMENT
+File: theorems/03_classical_negation_complement_unsat.txt
+Paper result: Proposition 4(7), p(cnot phi) = 1 - p(phi).
+Expected result: UNSAT.
+
+Pr(cnot A) != 1 - Pr(A)
+
+
+EXAMPLE 04: INCLUSION-EXCLUSION
+File: theorems/04_inclusion_exclusion_unsat.txt
+Paper result: Definition 10, Ax1.4,
+  p(phi)+p(psi) = p(phi & psi)+p(phi v psi).
+Expected result: UNSAT.
+
+Pr(A) + Pr(B) != Pr(A & B) + Pr(A v B)
+
+
+EXAMPLE 05: POSITIVE REGION DECOMPOSITION
+File: theorems/05_positive_region_decomposition_unsat.txt
+Paper result: Corollary 3,
+  p(phi) = p(phi_B°)+p(phi_B)+p(phi_C).
+Expected result: UNSAT.
+
+Pr(A) != Pr(A & oA) + Pr(A & cnot (~A v oA)) + Pr(A & ~A)
+
+
+EXAMPLE 06: NEGATIVE REGION DECOMPOSITION
+File: theorems/06_negative_region_decomposition_unsat.txt
+Paper result: Corollary 3,
+  p(~phi) = p(phi_D°)+p(phi_D)+p(phi_C).
+Expected result: UNSAT.
+
+Pr(~A) != Pr(~A & oA) + Pr(~A & cnot (A v oA)) + Pr(A & ~A)
+
+
+EXAMPLE 07: RELIABILITY REGION DECOMPOSITION
+File: theorems/07_reliability_region_decomposition_unsat.txt
+Paper result: Corollary 2,
+  p(ophi) = p(phi_B°)+p(phi_D°).
+Expected result: UNSAT.
+
+Pr(oA) != Pr(A & oA) + Pr(~A & oA)
+
+
+EXAMPLE 08: SIX-REGION PARTITION
+File: theorems/08_six_region_partition_unsat.txt
+Paper result: Proposition 2 and Definition 12, Ax6.3.  The six region
+probabilities sum to 1.
+Expected result: UNSAT.
+
+Pr(A & oA) + Pr(A & cnot (~A v oA)) + Pr(A & ~A) + Pr(~A & cnot (A v oA)) + Pr(~A & oA) + Pr(cnot (A v ~A)) != 1
+
+
+EXAMPLE 09: ENTAILMENT IDENTITY
+File: theorems/09_entailment_identity_unsat.txt
+Paper result: Proposition 4(8).  If psi entails phi, then
+  p(phi & psi)=p(psi).
+Instance: psi=A & B and phi=A.
+Expected result: UNSAT.
+
+Pr(A & (A & B)) != Pr(A & B)
+
+
+EXAMPLE 10: CLASSICAL DIFFERENCE IDENTITY
+File: theorems/10_classical_difference_identity_unsat.txt
+Paper result: Proposition 4(9),
+  p(phi & cnot psi)=p(phi)-p(phi & psi).
+Expected result: UNSAT.
+
+Pr(A & cnot B) != Pr(A) - Pr(A & B)
+
+
+EXAMPLE 11: GAP-GLUT BALANCE IDENTITY
+File: theorems/11_gap_glut_balance_unsat.txt
+Distinctive derived result:
+  p(A)+p(~A) = 1+p(A & ~A)-p(cnot (A v ~A)).
+Equivalently, p(A)+p(~A)=1+conflict(A)-uncertainty(A).
+Expected result: UNSAT.
+
+Pr(A) + Pr(~A) != 1 + Pr(A & ~A) - Pr(cnot (A v ~A))
+
+
+EXAMPLE 12: POSITIVE CONFLICT IS POSSIBLE
+File: theorems/12_conflict_possible_sat.txt
+Distinctive nonclassical possibility: p(A & ~A)>0.
+Expected result: SAT.
+
+Pr(A & ~A) > 0
+
+
+EXAMPLE 13: POSITIVE UNCERTAINTY IS POSSIBLE
+File: theorems/13_uncertainty_possible_sat.txt
+Distinctive nonclassical possibility: p(A v ~A)<1.
+Expected result: SAT.
+
+Pr(A v ~A) < 1
+
+
+EXAMPLE 14: DE MORGAN NEGATION NEED NOT BE COMPLEMENTARY
+File: theorems/14_demorgan_noncomplementarity_sat.txt
+Distinctive nonclassical possibility: p(~A) need not equal 1-p(A).
+Expected result: SAT.
+
+Pr(~A) != 1 - Pr(A)
+
+
+CLASSIFICATION
+
+Distinctive LET_K+ universal results:
+  Examples 01, 02, 05, 06, 07, 08, and 11.
+
+Distinctive LET_K+ satisfiable possibilities:
+  Examples 12, 13, and 14.
+
+Classical sanity checks recovered inside LET_K+:
+  Examples 03, 04, 09, and 10.
+
+The paper's soundness/completeness results (Corollaries 6-8) and the
+semantic-syntactic equivalence of six-valued Jeffrey updating (Proposition 15)
+are meta-theorems and are not reducible to single TwistPrSAT input blocks.

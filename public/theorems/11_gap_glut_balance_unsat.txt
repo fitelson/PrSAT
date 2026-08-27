@@ -1,0 +1,1 @@
+Pr(A) + Pr(~A) != 1 + Pr(A & ~A) - Pr(cnot (A v ~A))

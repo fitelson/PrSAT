@@ -18,7 +18,9 @@
   and the four-letter resource bound.
 - Added a downloadable, ready-to-load example file for the uniform six-region
   model, verified independently by Z3 and Random Search/browser algebra.
-- Added a theorem-challenge index and ten separately loadable UNSAT files for
-  central propositions and representation identities from the paper; the
-  entire pack is regression-tested through Z3.
+- Expanded the theorem pack to eleven UNSAT challenges and three SAT
+  countermodels, including the gap-glut balance identity and models witnessing
+  conflict, uncertainty, and De Morgan noncomplementarity.
+- Added `TwistPrSAT_all_examples.txt`, a single labeled master file containing
+  the uniform six-region model and every SAT and UNSAT example so far.
 - Deployed to `https://fitelson.org/PrSAT/twist/`.

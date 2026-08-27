@@ -64,6 +64,16 @@ test('TwistPrSAT defaults to LET_K+ and solves a glut with Z3', async ({ page })
 
 test('public model and theorem example files are linked and ready to load', async ({ page }) => {
   await load_app(page)
+  const all_examples_link = page.getByRole('link', { name: 'Open all SAT and UNSAT examples in one text file' })
+  await expect(all_examples_link).toBeVisible()
+  await expect(all_examples_link).toHaveAttribute('href', 'TwistPrSAT_all_examples.txt')
+  const all_examples = await page.request.get(`${URL}TwistPrSAT_all_examples.txt`)
+  expect(all_examples.ok()).toBe(true)
+  const all_examples_text = await all_examples.text()
+  expect(all_examples_text).toContain('EXAMPLE 00: UNIFORM SIX-REGION MODEL')
+  expect(all_examples_text).toContain('EXAMPLE 11: GAP-GLUT BALANCE IDENTITY')
+  expect(all_examples_text).toContain('EXAMPLE 14: DE MORGAN NEGATION NEED NOT BE COMPLEMENTARY')
+
   const link = page.getByRole('link', { name: 'Download a ready-to-load example file' })
   await expect(link).toBeVisible()
   await expect(link).toHaveAttribute('href', 'TwistPrSAT_examples.txt')

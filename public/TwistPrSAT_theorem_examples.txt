@@ -27,6 +27,28 @@ For the region-decomposition results, the six regions induced by A are:
   D°_A = ~A & oA                        reliable disbelief
   U_A  = cnot (A v ~A)                  uncertainty
 
+WHICH RESULTS ARE DISTINCTIVE OF LET_K+?
+
+The most theory-specific universal results in this pack are 01, 02, and
+05-08, together with the gap-glut balance identity in 11.  They essentially
+involve the De Morgan negation ~, the reliability operator o, or the privileged
+six-region partition.  Examples 12-14 are SAT countermodels demonstrating
+three ways in which LET_K+ departs from classical probability: conflict can
+have positive probability, excluded middle can have probability below 1, and
+the De Morgan negation need not receive complementary probability.
+
+Examples 03, 04, 09, and 10 are useful checks but are not distinctive.  They
+are classical complement, inclusion-exclusion, entailment, and difference
+laws recovered inside the richer language by using cnot where a Boolean
+complement is required.
+
+The paper's soundness/completeness results (Corollaries 6-8) and the semantic-
+syntactic equivalence for six-valued Jeffrey updating (Proposition 15) are
+also theory-specific meta-theorems.  They are not encoded here as single input
+files: the former quantify over entire classes of probability functions and
+models, while the current TwistPrSAT application does not implement Jeffrey
+updates.
+
 
 01_reliable_contradiction_unsat.txt
 
@@ -219,3 +241,77 @@ For the region-decomposition results, the six regions induced by A are:
       Pr(A & cnot B) != Pr(A) - Pr(A & B)
 
   Expected result: UNSAT.
+
+
+11_gap_glut_balance_unsat.txt
+
+  Distinctive derived result:
+    Let c_A = p(A & ~A) be conflict mass and let
+    u_A = p(cnot (A v ~A)) = 1 - p(A v ~A) be uncertainty mass.  Then
+
+      p(A) + p(~A) = 1 + c_A - u_A.
+
+    Equivalently,
+
+      p(A) + p(~A)
+        = 1 + p(A & ~A) - p(cnot (A v ~A)).
+
+    This follows from inclusion-exclusion together with the definitions of
+    conflict and uncertainty.  Classical probability is the limiting case
+    c_A = u_A = 0, in which the right side is 1.
+
+  Negated challenge loaded into TwistPrSAT:
+      Pr(A) + Pr(~A) != 1 + Pr(A & ~A) - Pr(cnot (A v ~A))
+
+  Expected result: UNSAT.
+
+
+12_conflict_possible_sat.txt
+
+  Distinctive nonclassical possibility:
+    LET_K+ permits positive probability for a glut:
+
+      p(A & ~A) > 0.
+
+    This differs from classical probability, where a proposition conjoined
+    with its Boolean negation is impossible.  Here ~ is De Morgan negation,
+    so A & ~A identifies the conflict region C_A.
+
+  Model request loaded into TwistPrSAT:
+      Pr(A & ~A) > 0
+
+  Expected result: SAT.
+
+
+13_uncertainty_possible_sat.txt
+
+  Distinctive nonclassical possibility:
+    LET_K+ permits a gap, so excluded middle for De Morgan negation can have
+    probability below 1:
+
+      p(A v ~A) < 1.
+
+    The missing mass is the uncertainty region
+    u_A = p(cnot (A v ~A)).
+
+  Model request loaded into TwistPrSAT:
+      Pr(A v ~A) < 1
+
+  Expected result: SAT.
+
+
+14_demorgan_noncomplementarity_sat.txt
+
+  Distinctive nonclassical possibility:
+    The De Morgan negation ~A need not have the complementary probability of
+    A:
+
+      p(~A) != 1 - p(A).
+
+    Proposition 4(7) gives the complement law only for the classical negation
+    cnot A.  Conflict and uncertainty allow p(~A) to depart from 1-p(A).
+
+  Model request loaded into TwistPrSAT:
+      Pr(~A) != 1 - Pr(A)
+
+  Expected result: SAT.

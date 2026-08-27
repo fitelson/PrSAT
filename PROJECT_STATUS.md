@@ -21,9 +21,12 @@ Updated: 2026-08-27
   limits, and model evaluation.
 - A linked, ready-to-load `TwistPrSAT_examples.txt` file specifies the uniform
   six-region model and its derived coordinates and conditional probabilities.
-- A theorem-challenge index links ten separately loadable UNSAT files encoding
-  negations of Proposition 4, Ax1.4, Corollaries 2-3, Proposition 2, and the
-  paper's region decompositions. Z3 verifies that none has a countermodel.
+- A theorem-challenge index explains eleven separately loadable UNSAT files
+  and three SAT countermodels. The pack includes Proposition 4, Ax1.4,
+  Corollaries 2-3, Proposition 2, the gap-glut balance identity, and models
+  witnessing conflict, uncertainty, and De Morgan noncomplementarity.
+- `TwistPrSAT_all_examples.txt` consolidates the uniform six-region model and
+  all fourteen theorem/countermodel examples in one labeled master file.
 - Public deployment completed at `https://fitelson.org/PrSAT/twist/`.
 
 ## Verification gate
@@ -56,7 +59,7 @@ Updated: 2026-08-27
 
 - TypeScript and ESLint: passed.
 - Production build: passed.
-- Vitest: 737 passed, 1 skipped, 1 todo across 27 files.
+- Vitest: 738 passed, 1 skipped, 1 todo across 27 files.
 - Chromium Playwright: 28 passed, 1 intentionally skipped.
 - Production dependency audit: 0 vulnerabilities.
 - Live HTTP and asset checks: passed with HTTP 200 and required COOP/COEP

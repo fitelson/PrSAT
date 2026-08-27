@@ -39,9 +39,15 @@ Conditional probability `Pr(B | A)` is the ordinary ratio
 of the six regions probability `1/6` and checks the induced one-, three-, and
 six-dimensional quantities and two conditional probabilities.
 
-`public/TwistPrSAT_theorem_examples.txt` indexes ten separately loadable files
-under `public/theorems/`. Each file negates a result from the paper and should
-return UNSAT in Z3, thereby checking that TwistPrSAT finds no countermodel.
+`public/TwistPrSAT_theorem_examples.txt` explains fourteen separately loadable
+files under `public/theorems/`: eleven UNSAT theorem challenges and three SAT
+countermodels highlighting conflict, uncertainty, and De Morgan
+noncomplementarity.
+
+`public/TwistPrSAT_all_examples.txt` is the single master file containing the
+uniform six-region SAT model, every UNSAT theorem challenge, and the SAT
+countermodels illustrating conflict, uncertainty, and De Morgan
+noncomplementarity. Users should copy or load one labeled block at a time.
 
 ## Solvers
 
