@@ -1,7 +1,7 @@
 {
-  "name": "prsat-3.1-experimental",
+  "name": "twistprsat",
   "private": true,
-  "version": "3.1.0-experimental",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,7 +14,8 @@
     "test": "npm run test:unit && npm run test:e2e",
     "test-single": "vitest --allowOnly",
     "maple-bridge": "node maple_bridge/server.mjs",
-    "install-local-web": "zsh scripts/install_local_web.zsh"
+    "install-local-web": "zsh scripts/install_local_web.zsh",
+    "deploy": "npm run build && ssh fitelson@fitelson.org 'mkdir -p /home/fitelson/www/www/PrSAT/twist' && scp -r dist/. fitelson@fitelson.org:/home/fitelson/www/www/PrSAT/twist/"
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",

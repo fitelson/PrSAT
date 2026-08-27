@@ -12,6 +12,7 @@ export const sentence_builder = {
   val: (v: boolean): Sentence => ({ tag: 'value', value: v }),
   letter: (id: string, index?: number): SentenceMap['letter'] => ({ tag: 'letter', id, index: index ?? 0 }),
   not: (s: Sentence): Sentence => ({ tag: 'negation', sentence: s }),
+  reliable: (s: Sentence): Sentence => ({ tag: 'reliability', sentence: s }),
   and: (left: Sentence, right: Sentence): Sentence => ({ tag: 'conjunction', left, right }),
   or: (left: Sentence, right: Sentence): Sentence => ({ tag: 'disjunction', left, right }),
   imp: (left: Sentence, right: Sentence): Sentence => ({ tag: 'conditional', left, right }),
@@ -271,6 +272,9 @@ export const recursively_evaluate_sentence = (eval_letter: (l: SentenceMap['lett
   } else if (sentence.tag === 'negation') {
     const sub_value = evaluate(sentence.sentence)
     return !sub_value
+  } else if (sentence.tag === 'reliability') {
+    evaluate(sentence.sentence)
+    return true
   } else if (sentence.tag === 'conjunction') {
     const lv = evaluate(sentence.left)
     const rv = evaluate(sentence.right)
@@ -344,7 +348,7 @@ export const evaluate_sentence = (eval_letter: (l: SentenceMap['letter']) => boo
           // args.unshift({ s: top.s, value: assert_exists(assignments[top.s.id]) })
           // value_map.set(top.s, assert_exists(assignments[top.s.id]))
           value_map.set(top.s, eval_letter(top.s))
-        } else if (top.s.tag === 'negation') {
+        } else if (top.s.tag === 'negation' || top.s.tag === 'reliability') {
           stack.push({ tag: 'partial', s: top.s })
           stack.push({ tag: 'start', s: top.s.sentence })
         } else if (top.s.tag === 'conjunction') {
@@ -378,6 +382,9 @@ export const evaluate_sentence = (eval_letter: (l: SentenceMap['letter']) => boo
           // assert(s.s === top.s.sentence)
           // args.push({ s: top.s, value: !s.value })
           value_map.set(top.s, !s)
+        } else if (top.s.tag === 'reliability') {
+          assert_exists(value_map.get(top.s.sentence))
+          value_map.set(top.s, true)
         } else if (top.s.tag === 'conjunction') {
           // assert(args.length >= 2, `Conjunction expected 2 argument, got ${args.length}!`)
           // const l = assert_exists(args.pop())
@@ -523,7 +530,7 @@ const letters_in_sentence = (sentence: Sentence, letters: SentenceMap['letter'][
   } else if (sentence.tag === 'letter') {
     letters.push(sentence)
     return letters
-  } else if (sentence.tag === 'negation') {
+  } else if (sentence.tag === 'negation' || sentence.tag === 'reliability') {
     return letters_in_sentence(sentence.sentence, letters)
   } else {
     const ll = letters_in_sentence(sentence.left, letters)
@@ -705,7 +712,7 @@ export const real_expr_to_random_string = (random: Random, expr: RealExpr): stri
 const sentence_to_gen_string = (s: Sentence, gens: StringGens<'tag', Sentence>): string => {
   const wrap = (s: Sentence): string => {
     const sub_str = sentence_to_gen_string(s, gens)
-    if (s.tag === 'value' || s.tag === 'letter' || s.tag === 'negation') {
+    if (s.tag === 'value' || s.tag === 'letter' || s.tag === 'negation' || s.tag === 'reliability') {
       return sub_str
     } else {
       return `(${sub_str})`
@@ -718,6 +725,8 @@ const sentence_to_gen_string = (s: Sentence, gens: StringGens<'tag', Sentence>):
     return `${s.id}${s.index > 0 ? s.index : ''}`
   } else if (s.tag === 'negation') {
     return `${gens['negation']()}${wrap(s.sentence)}`
+  } else if (s.tag === 'reliability') {
+    return `${gens['reliability']()}${wrap(s.sentence)}`
   } else {
     const c = gens[s.tag]()
     return `${wrap(s.left)} ${c} ${wrap(s.right)}`
@@ -728,6 +737,7 @@ export const possible_sentence_connectives: PossibleConnectives<'tag', Sentence>
   value: [''],
   letter: [''],
   negation: ['~', '-', '!'],
+  reliability: ['○', 'o'],
   disjunction: ['∨', '\\/', 'v'],
   conjunction: ['&', '/\\'],
   conditional: ['→', '->', '>'],
@@ -739,6 +749,7 @@ export const sentence_to_string = (s: Sentence): string => {
     value: () => { throw new Error('Value sentence shouldn\'t have a connective!') },
     letter: () => { throw new Error('Letter sentence shouldn\'t have a connective!') },
     negation: () => assert_exists(possible_sentence_connectives['negation'][0]),
+    reliability: () => assert_exists(possible_sentence_connectives['reliability'][0]),
     disjunction: () => assert_exists(possible_sentence_connectives['disjunction'][0]),
     conjunction: () => assert_exists(possible_sentence_connectives['conjunction'][0]),
     conditional: () => assert_exists(possible_sentence_connectives['conditional'][0]),
@@ -751,6 +762,7 @@ export const sentence_to_random_string = (random: Random, s: Sentence): string =
     value: () => { throw new Error('Value sentence shouldn\'t have a connective!') },
     letter: () => { throw new Error('Letter sentence shouldn\'t have a connective!') },
     negation: () => random.pick(possible_sentence_connectives['negation']),
+    reliability: () => random.pick(possible_sentence_connectives['reliability']),
     disjunction: () => random.pick(possible_sentence_connectives['disjunction']),
     conjunction: () => random.pick(possible_sentence_connectives['conjunction']),
     conditional: () => random.pick(possible_sentence_connectives['conditional']),
@@ -1641,6 +1653,7 @@ export class SentenceFuzzer {
       value: { arity: 0, construct: () => ({ tag: 'value', value: this.random.boolean() }) },
       letter: { arity: 0, construct: () => this.random.pick(letters) },
       negation: { arity: 1, construct: ([s]) => ({ tag: 'negation', sentence: ae(s) }) },
+      reliability: { arity: 1, construct: ([s]) => ({ tag: 'reliability', sentence: ae(s) }) },
       disjunction: { arity: 2, construct: ([l, r]) => ({ tag: 'disjunction', left: ae(l), right: ae(r) }) },
       conjunction: { arity: 2, construct: ([l, r]) => ({ tag: 'conjunction', left: ae(l), right: ae(r) }) },
       conditional: { arity: 2, construct: ([l, r]) => ({ tag: 'conditional', left: ae(l), right: ae(r) }) },
@@ -2037,7 +2050,7 @@ export const free_sentence_variables = (s: Sentence, set: LetterSet, declared: L
       if (!declared.has(s)) {
         set.add(s)
       }
-    } else if (s.tag === 'negation') {
+    } else if (s.tag === 'negation' || s.tag === 'reliability') {
       sub(s.sentence)
     } else if (s.tag === 'value') {
       // nothing!

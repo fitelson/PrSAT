@@ -1,35 +1,79 @@
-## Contributors
+# TwistPrSAT
 
-- [Koissi Adjorlolo](https://github.com/imapersonman)
-- [Claude](https://claude.ai/code) (AI pair programmer)
-- [Codex](https://openai.com/codex/) (AI pair programmer)
-- [Branden Fitelson](https://github.com/fitelson)
+TwistPrSAT is a browser-based probability-satisfiability checker for the
+six-valued logic `LET_K+` used in Borja Macias, Coniglio, and
+Hernandez-Tello, *Probabilities beyond Belnap-Dunn logic: dealing with gaps,
+gluts and reliability* (arXiv:2608.20228).
 
-## Installation
+Live app: <https://fitelson.org/PrSAT/twist/>
 
-### Requirements
+## Semantics
 
-- (Optional) [Visual Studio Code (VSCode)](https://code.visualstudio.com)
-  - Any plain-text editor and terminal will do.
-- [Node + NVM](https://nodejs.org/en/download)
+Each propositional letter takes one of six values:
 
-### Steps
-1. Open your terminal of choice (could be in VSCode).
-2. Navigate to desired directory.
-3. Run `git clone https://github.com/fitelson/PrSAT.git`.
-4. Run `cd PrSAT`.
-5. Run `npm install`.
+| Value | Meaning | Twist triple |
+| --- | --- | --- |
+| `T` | reliable belief | `(1,0,1)` |
+| `t` | belief | `(1,0,0)` |
+| `b` | conflict | `(1,1,0)` |
+| `f` | disbelief | `(0,1,0)` |
+| `F` | reliable disbelief | `(0,1,1)` |
+| `n` | uncertainty | `(0,0,0)` |
 
-## Running the development server
+`Pr(A)` is the total mass of the designated values `T`, `t`, and `b`.
+Consequently the paper's three coordinates are available as `Pr(A)`,
+`Pr(~A)`, and `Pr(○A)`. Its six region masses are probabilities of the six
+region-identification formulas.
 
+Object-language syntax:
+
+- `~A`, `-A`, or `!A`: De Morgan negation;
+- `○A` or `oA`: reliability/classicality;
+- `∼A` or `cnot A`: classical negation, expanded as `A -> false`;
+- `&`, `v`, `->`, `<->`: conjunction, disjunction, implication, biconditional.
+
+Conditional probability `Pr(B | A)` is the ordinary ratio
+`Pr(B & A) / Pr(A)` and therefore requires `Pr(A) != 0`.
+
+## Solvers
+
+- **SMT (Z3)** is the decision-procedure path. Formulas are evaluated on all
+  `6^m` valuations, probabilities become finite sums of nonnegative state
+  masses, and the resulting real constraints are sent to Z3.
+- **Random Search** uses the inherited hand-rolled browser equation solver,
+  followed by numerical search, rational reconstruction, and exact
+  verification. It returns `SAT` only with an exact rational witness; failure
+  to find one is reported as `unknown`, never `UNSAT` (except for an
+  inconsistent exact linear subsystem).
+
+The current 4,096-state resource budget permits at most four distinct
+propositional letters in `LET_K+` mode (`6^4 = 1,296`).
+
+## Development
+
+```bash
+npm ci
+npm run lint
+npm run build
+npm run test:unit
+npm run test:e2e
 ```
-npm run dev
+
+Development uses Vite on port 5173; Playwright uses strict port 5174. Deploy:
+
+```bash
+npm run deploy
 ```
 
-A link to PrSAT running locally will appear in your terminal.
+This builds and uploads `dist/.` to
+`fitelson@fitelson.org:/home/fitelson/www/www/PrSAT/twist/`.
 
-The permanent local app is always at http://localhost:5317/ and that port is
-reserved exclusively for its background service. `npm run dev` uses
-http://127.0.0.1:5173/ for development and debugging; `npm run preview` uses
-http://127.0.0.1:4173/; automated browser tests use port 5174. Temporary
-servers fail on a port conflict instead of moving to the permanent address.
+## Provenance
+
+TwistPrSAT is an isolated branch of PrSAT 3.1. It reuses the PrSAT parser,
+constraint language, Z3 integration, Random Search engine, browser equation
+solver, rational verifier, and UI. The `LET_K+` semantic core and solver
+adapter are in `src/letk.ts` and `src/letk_sat.ts`.
+
+Contributors to the inherited PrSAT code include Koissi Adjorlolo, Branden
+Fitelson, Claude, and Codex.

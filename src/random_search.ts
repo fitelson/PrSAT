@@ -72,6 +72,10 @@ import {
   translate_constraints_cck,
   translate_constraint_or_real_expr_cck,
 } from './cck'
+import {
+  translate_constraints_letk,
+  translate_constraint_or_real_expr_letk,
+} from './letk'
 
 type Constraint = PrSat['Constraint']
 type RealExpr = PrSat['RealExpr']
@@ -81,7 +85,7 @@ export const DEFAULT_SEARCH_ATTEMPTS = 3
 export const DEFAULT_MAX_RATIONALIZE_ATTEMPTS = 40
 export const MAX_RANDOM_SEARCH_ATTEMPTS = 100
 export const MAX_RANDOM_RATIONALIZE_ATTEMPTS = 200
-export type ProbabilitySemantics = 'classical' | 'trivalent-ers' | 'trivalent-cck'
+export type ProbabilitySemantics = 'classical' | 'trivalent-ers' | 'trivalent-cck' | 'twist-letk'
 
 // Numeric acceptance threshold. Non-strict inequalities sitting exactly on
 // their boundary (e.g. a state pinned to 0 by a certainty constraint) have
@@ -163,6 +167,8 @@ const describe_run = (opts: RandomSearchOptions, seed: string, attempts_used: nu
       ? `; Trivalent (ERS) Random Search run`
       : opts.semantics === 'trivalent-cck'
         ? `; Trivalent (CCK) Random Search run`
+        : opts.semantics === 'twist-letk'
+          ? `; TwistPrSAT LET_K+ Random Search run`
         : `; PrSAT Random Search run`,
     `; semantics = ${opts.semantics}`,
     `; seed = ${seed}`,
@@ -349,6 +355,32 @@ export const build_rational_cck_evaluator = (
   return { tag: 'result', result: rational_to_model_assignment(result.value) }
 }
 
+export const build_rational_letk_evaluator = (
+  rational_assignments: Record<number, Rational>,
+) => async (evt_tt: TruthTable, c_or_re: ConstraintOrRealExpr): Promise<FancyEvaluatorOutput> => {
+  const declared_letters = new LetterSet([...evt_tt.letters()])
+  const free_sent = free_variables_in_constraint_or_real_expr(c_or_re, new LetterSet(), declared_letters)
+  const free_real = free_real_variables_in_constraint_or_real_expr(c_or_re, new Set())
+  for (const declared of evt_tt.variables.real) free_real.delete(declared)
+  if (!free_sent.is_empty() || free_real.size > 0) {
+    return { tag: 'undeclared-vars', variables: { sentence: [...free_sent], real: [...free_real] } }
+  }
+
+  const translated = translate_constraint_or_real_expr_letk(evt_tt, c_or_re)
+  if (translated.tag === 'constraint') {
+    const result = evaluate_constraint_rational(guard_div0_conditions_in_constraint(translated.constraint), rational_assignments)
+    if (result.tag !== 'ok') return { tag: 'div0' }
+    return { tag: 'bool-result', result: result.value }
+  }
+  for (const guard of div0_conditions_in_constraint_or_real_expr(translated)) {
+    const result = evaluate_constraint_rational(guard, rational_assignments)
+    if (result.tag !== 'ok' || !result.value) return { tag: 'div0' }
+  }
+  const result = evaluate_real_expr_rational(translated.real_expr, rational_assignments)
+  if (result.tag !== 'ok') return { tag: 'div0' }
+  return { tag: 'result', result: rational_to_model_assignment(result.value) }
+}
+
 const build_rational_semantic_evaluator = (
   semantics: ProbabilitySemantics,
   assignments: Record<number, Rational>,
@@ -357,6 +389,8 @@ const build_rational_semantic_evaluator = (
     ? build_rational_cooper_evaluator(assignments)
     : semantics === 'trivalent-cck'
       ? build_rational_cck_evaluator(assignments)
+      : semantics === 'twist-letk'
+        ? build_rational_letk_evaluator(assignments)
       : build_rational_evaluator(assignments)
 
 // ---------- Maple-bridge branch search ----------
@@ -531,6 +565,8 @@ export const random_pr_sat_wrapped = async (
     ? translate_constraints_cooper(tt, constraints)
     : opts.semantics === 'trivalent-cck'
       ? translate_constraints_cck(tt, constraints)
+      : opts.semantics === 'twist-letk'
+        ? translate_constraints_letk(tt, constraints)
       : translate(tt, constraints)
   // Validate solver-language restrictions (especially integer exponent shape
   // and magnitude) before any numeric or polynomial work begins.

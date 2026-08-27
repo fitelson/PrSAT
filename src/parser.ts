@@ -9,7 +9,7 @@ type Sentence = PrSat['Sentence']
 type RealExpr = PrSat['RealExpr']
 type Constraint = PrSat['Constraint']
 
-const { val, letter, not, and, or, imp, iff } = sentence_builder
+const { val, letter, not, reliable, and, or, imp, iff } = sentence_builder
 const { lit, neg, power, multiply, divide, plus, minus, pr, cpr, vbl } = real_expr_builder
 const { eq, neq, lt, lte, gt, gte, cnot, cand, cor, cimp, ciff } = constraint_builder
 
@@ -153,6 +153,8 @@ const ConstraintLang = P.createLanguage({
   SOr: (r) => right_assoc_binary(r.SAnd, stag_to_c_parser('disjunction').result(or)),
   SAnd: (r) => right_assoc_binary(r.SentenceFactor, stag_to_c_parser('conjunction').result(and)),
   SentenceFactor: (r) => P.alt(
+    r.ClassicalNot,
+    r.Reliability,
     r.Not,
     r.WrappedSentence,
     P.string('true').or(P.string('⊤')).map(() => val(true)),
@@ -163,6 +165,9 @@ const ConstraintLang = P.createLanguage({
     .map(([_l, _lp, s, _rp, _r]) => s),
   SL: () => P.seq(P.regexp(/[A-Z]/), P.regexp(/([1-9][0-9]*)?/)).map(([id, index]) => letter(id, index.length > 0 ? parseInt(index) : 0)),
   Not: (r) => P.seq(stag_to_c_parser('negation'), P.optWhitespace, r.SentenceFactor).map(([_1, _2, s]) => not(s)),
+  Reliability: (r) => P.seq(stag_to_c_parser('reliability'), P.optWhitespace, r.SentenceFactor).map(([_1, _2, s]) => reliable(s)),
+  ClassicalNot: (r) => P.seq(P.alt(P.string('∼'), P.string('cnot')), P.optWhitespace, r.SentenceFactor)
+    .map(([_1, _2, s]) => imp(s, val(false))),
 })
 
 const parse_error_to_string = (error: P.Failure): string => {

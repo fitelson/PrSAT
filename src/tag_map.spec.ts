@@ -371,6 +371,12 @@ const constraint_grammar: ConstraintMutualMap['grammar']= {
         sentence: 'Sentence'
       },
     },
+    reliability: {
+      tag: 'record',
+      record: {
+        sentence: 'Sentence'
+      },
+    },
     conjunction: {
       tag: 'record',
       record: {
@@ -485,7 +491,7 @@ describe('constraint_recursors', () => {
     describe('sentence_to_string', () => {
       const wrap = (sentence: Sentence): string => {
         const str = sentence_to_string(sentence)
-        if (sentence.tag === 'negation' || sentence.tag === 'letter' || sentence.tag === 'value') {
+        if (sentence.tag === 'negation' || sentence.tag === 'reliability' || sentence.tag === 'letter' || sentence.tag === 'value') {
           return str
         } else {
           return `(${str})`
@@ -494,6 +500,7 @@ describe('constraint_recursors', () => {
 
       const sentence_to_string = recursors.Sentence<undefined, string>(() => undefined, {
         negation: ({ sentence }) => `~${wrap(sentence)}`,
+        reliability: ({ sentence }) => `○${wrap(sentence)}`,
         conjunction: ({ left, right }) => `${wrap(left)} & ${wrap(right)}`,
         disjunction: ({ left, right }) => `${wrap(left)} \\/ ${wrap(right)}`,
         conditional: ({ left, right }) => `${wrap(left)} -> ${wrap(right)}`,
@@ -513,6 +520,7 @@ describe('constraint_recursors', () => {
         negation: (input, acc, rec) => {
           return rec(input.sentence, acc)
         },
+        reliability: (input, acc, rec) => rec(input.sentence, acc),
         conjunction: (input, acc, rec) => {
           const lacc = rec(input.left, acc)
           return rec(input.right, lacc)
@@ -538,6 +546,7 @@ describe('constraint_recursors', () => {
 
       const letters_in_2 = recursors.Sentence<string[], string[]>(() => [], {
         negation: (input, acc, rec) => rec(input.sentence, acc),
+        reliability: (input, acc, rec) => rec(input.sentence, acc),
         conjunction: (input, acc, rec) => {
           const lacc = rec(input.left, acc)
           return rec(input.right, lacc)
@@ -730,7 +739,7 @@ describe('constraint_fuzzers', () => {
 
   const wrap = (sentence: Sentence): string => {
     const str = sentence_to_string(sentence)
-    if (sentence.tag === 'negation' || sentence.tag === 'letter' || sentence.tag === 'value') {
+    if (sentence.tag === 'negation' || sentence.tag === 'reliability' || sentence.tag === 'letter' || sentence.tag === 'value') {
       return str
     } else {
       return `(${str})`
@@ -739,6 +748,7 @@ describe('constraint_fuzzers', () => {
 
   const sentence_to_string = recursors.Sentence<undefined, string>(() => undefined, {
     negation: ({ sentence }) => `~${wrap(sentence)}`,
+    reliability: ({ sentence }) => `○${wrap(sentence)}`,
     conjunction: ({ left, right }) => `${wrap(left)} & ${wrap(right)}`,
     disjunction: ({ left, right }) => `${wrap(left)} \\/ ${wrap(right)}`,
     conditional: ({ left, right }) => `${wrap(left)} -> ${wrap(right)}`,

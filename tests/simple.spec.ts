@@ -6,9 +6,15 @@ import { fallthrough } from '../src/utils'
 const URL = 'http://127.0.0.1:5174/'
 const DEFAULT_TIMEOUT = 20_000
 
-const to_load = async (page: Page): Promise<void> => {
+const load_app = async (page: Page): Promise<void> => {
   await page.goto(URL, { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId(TestId.z3_status)).toBeEmpty({ timeout: DEFAULT_TIMEOUT })
+}
+
+const to_load = async (page: Page): Promise<void> => {
+  await load_app(page)
+  const letk = page.getByTestId(TestId.solver_method.letk_toggle)
+  if (await letk.isChecked()) await letk.uncheck()
 }
 
 const find_model = async (page: Page, with_result: 'sat' | 'unsat' | 'unknown' | 'cancelled', timeout_ms?: number) => {
@@ -43,6 +49,33 @@ test('single constraint', async ({ page }) => {
   await expect(page.getByTestId(TestId.model_table)).toBeVisible({ timeout: DEFAULT_TIMEOUT })
   await expect(page.getByText(Constants.SAT)).toBeVisible()
 });
+
+test('TwistPrSAT defaults to LET_K+ and solves a glut with Z3', async ({ page }) => {
+  await load_app(page)
+  await expect(page.getByText('TwistPrSAT', { exact: true })).toBeVisible()
+  await expect(page.getByTestId(TestId.solver_method.letk_toggle)).toBeChecked()
+
+  const test_ids = TestId.generic_multi_input('constraints')
+  await set_block_input(page, test_ids, ['Pr(A) = 1', 'Pr(~A) = 1', 'Pr(○A) = 0'])
+  await find_model(page, 'sat', DEFAULT_TIMEOUT)
+
+  await expect(page.getByTestId(TestId.model_table).locator('tbody tr')).toHaveCount(6)
+  await expect(page.getByTestId(TestId.solver_method.badge)).toContainText('LET_K+')
+})
+
+test('TwistPrSAT Random Search uses browser algebra for an exact glut witness', async ({ page }) => {
+  await load_app(page)
+  const test_ids = TestId.generic_multi_input('constraints')
+  await set_block_input(page, test_ids, ['Pr(A) = 1', 'Pr(~A) = 1', 'Pr(○A) = 0'])
+  await page.getByTestId(TestId.solver_method.select).selectOption('random')
+  await page.getByTestId(TestId.solver_method.seed_input).fill('twist-e2e-glut')
+  await find_model(page, 'sat', DEFAULT_TIMEOUT)
+
+  const badge = page.getByTestId(TestId.solver_method.badge)
+  await expect(badge).toContainText('TwistPrSAT LET_K+ Random Search')
+  await expect(badge).toContainText('browser algebra')
+  await expect(badge).toContainText('seed: twist-e2e-glut')
+})
 
 test('random search SAT for Pr(A) = 1/2', async ({ page }) => {
   await to_load(page)

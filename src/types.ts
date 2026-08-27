@@ -4,6 +4,7 @@ type Sentence =
   | { tag: 'value', value: boolean }
   | { tag: 'letter', id: string, index: number }
   | { tag: 'negation', sentence: Sentence }
+  | { tag: 'reliability', sentence: Sentence }
   | { tag: 'disjunction', left: Sentence, right: Sentence }
   | { tag: 'conjunction', left: Sentence, right: Sentence }
   | { tag: 'conditional', left: Sentence, right: Sentence }
@@ -86,6 +87,12 @@ export const PrSatFuncs = setup_mutual_map<PrSat>()({
       }
     },
     negation: {
+      tag: "record",
+      record: {
+        sentence: "Sentence"
+      }
+    },
+    reliability: {
       tag: "record",
       record: {
         sentence: "Sentence"

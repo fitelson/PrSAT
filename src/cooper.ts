@@ -57,6 +57,9 @@ export const evaluate_cooper_sentence = (
     return eval_letter(sentence) ? 1 : 0
   } else if (sentence.tag === 'negation') {
     return cooper_not(sub(sentence.sentence))
+  } else if (sentence.tag === 'reliability') {
+    const value = sub(sentence.sentence)
+    return value === 0.5 ? 0 : 1
   } else if (sentence.tag === 'conjunction') {
     return cooper_and(sub(sentence.left), sub(sentence.right))
   } else if (sentence.tag === 'disjunction') {

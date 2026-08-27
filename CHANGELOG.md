@@ -1,4 +1,21 @@
-# PrSAT 3.1 (experimental) Changelog
+# TwistPrSAT changelog
+
+## 2026-08-27
+
+### Added: public LET_K+ twist-probability solver
+
+- Added exact six-valued `LET_K+` semantics and base-six truth tables.
+- Added the reliability operator `○`/`o`; classical negation `∼`/`cnot` is
+  expanded as implication to falsity.
+- Added Z3 and Random Search translation paths for positive-extension
+  probability, including the hand-rolled browser equation solver and exact
+  rational verification.
+- Added full truth-table certificates, six-region tests, solver tests, and
+  Chromium end-to-end tests.
+- Branded the isolated app as TwistPrSAT and added deployment to
+  `https://fitelson.org/PrSAT/twist/`.
+
+# Inherited PrSAT 3.1 (experimental) changelog
 
 > **Note:** Experimental fork of 3.0 to prototype a Random Search solver alongside Z3. Not deployed. See `RANDOM_SEARCH.md` for the design, `CLAUDE.md` for guidance.
 

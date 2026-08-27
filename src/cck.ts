@@ -139,6 +139,9 @@ export const evaluate_cck_sentence = (
     return truth_value(eval_letter(sentence))
   } else if (sentence.tag === 'negation') {
     return cck_not(sub(sentence.sentence))
+  } else if (sentence.tag === 'reliability') {
+    const value = sub(sentence.sentence)
+    return value === 0.5 ? 0 : 1
   } else if (sentence.tag === 'conjunction') {
     return cck_and(sub(sentence.left), sub(sentence.right))
   } else if (sentence.tag === 'disjunction') {

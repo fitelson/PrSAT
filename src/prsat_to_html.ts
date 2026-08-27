@@ -167,10 +167,13 @@ const sentence_to_html = (s: Sentence): MathMLElement => {
     return math_el('mi', { mathvariant: 'normal' }, id)
   } else if (s.tag === 'negation') {
     const op = math_el('mo', {}, '~')
-    return math_el('mrow', {}, op, wrap(s.sentence, ['negation', 'letter', 'value']))
+    return math_el('mrow', {}, op, wrap(s.sentence, ['negation', 'reliability', 'letter', 'value']))
+  } else if (s.tag === 'reliability') {
+    const op = math_el('mo', {}, '○')
+    return math_el('mrow', {}, op, wrap(s.sentence, ['negation', 'reliability', 'letter', 'value']))
   } else {
     const connectives = assert_exists(possible_sentence_connectives[s.tag])
     const op = math_el('mo', {}, assert_exists(connectives[0]))
-    return math_el('mrow', {}, wrap(s.left, ['negation', 'letter', 'value']), op, wrap(s.right, ['negation', 'letter', 'value']))
+    return math_el('mrow', {}, wrap(s.left, ['negation', 'reliability', 'letter', 'value']), op, wrap(s.right, ['negation', 'reliability', 'letter', 'value']))
   }
 }

@@ -2,9 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## PrSAT 3.1 (experimental)
+## TwistPrSAT
 
-**This is an experimental fork of PrSAT 3.0.** Source of truth for production: `../PrSAT 3.0/PrSAT-main/`. Do NOT deploy this experimental branch.
+This is the isolated `LET_K+` probability-satisfiability app deployed at
+`https://fitelson.org/PrSAT/twist/`. Its semantic core is `src/letk.ts`; the
+Z3 adapter is `src/letk_sat.ts`; Random Search retains the hand-rolled browser
+equation solver. `PROJECT_STATUS.md` is the authoritative status. Do not
+propagate changes into sibling PrSAT checkouts unless explicitly requested.
+
+## Inherited PrSAT 3.1 architecture
 
 The goal of 3.1 is to add a **Random Search** solver with a zero-dependency
 equation-solving layer, while retaining the optional local Maple 2024 bridge

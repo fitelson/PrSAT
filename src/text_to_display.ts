@@ -5,9 +5,11 @@ import { parse_constraint, parse_constraint_or_real_expr } from "./parser";
 import { constraint_to_string, letter_string, TruthTable, variables_in_constraints } from "./pr_sat";
 import { pr3_sat_wrapped, Pr3SATResult } from "./pr3_sat";
 import { FancyEvaluatorOutput, init_z3, ModelAssignmentOutput, pr_sat_wrapped, PrSATResult, WrappedSolver, WrappedSolverResult } from "./z3_integration";
-import { build_rational_cck_evaluator, build_rational_cooper_evaluator, build_rational_evaluator, ProbabilitySemantics, RandomPrSATResult, DEFAULT_SEARCH_ATTEMPTS, RandomSearchOptions } from "./random_search";
+import { build_rational_cck_evaluator, build_rational_cooper_evaluator, build_rational_evaluator, build_rational_letk_evaluator, ProbabilitySemantics, RandomPrSATResult, DEFAULT_SEARCH_ATTEMPTS, RandomSearchOptions } from "./random_search";
 import { CCKTruthTable, table_truth_value } from "./cck";
 import { cck_sat_wrapped, CCKSATResult } from "./cck_sat";
+import { LETKTruthTable, is_letk_truth_table, table_letk_value } from './letk';
+import { letk_sat_wrapped, LETKSATResult } from './letk_sat';
 import { ping_maple_bridge, random_search_equation_engine_options } from "./maple_bridge_client";
 import { s_to_string } from "./s";
 import { ConstraintOrRealExpr, PrSat } from "./types";
@@ -26,7 +28,7 @@ const root = assert_exists(document.getElementById('app'), 'Root element with id
 
 type Constraint = PrSat['Constraint']
 type SolverMethod = 'z3' | 'random'
-type SolverResult = PrSATResult | Pr3SATResult | CCKSATResult | RandomPrSATResult
+type SolverResult = PrSATResult | Pr3SATResult | CCKSATResult | LETKSATResult | RandomPrSATResult
 // type RealExpr = PrSat['RealExpr']
 // type Sentence = PrSat['Sentence']
 
@@ -797,6 +799,12 @@ const model_assignment_display = (ma: ModelAssignmentOutput): Node => {
   return math_el('math', {}, sub(ma))
 }
 
+const table_value_label = (tt: TruthTable, letter: Parameters<TruthTable['letter_value_from_index']>[0], state_index: number): string => {
+  if (is_letk_truth_table(tt)) return table_letk_value(tt, letter, state_index)
+  const value = table_truth_value(tt, letter, state_index)
+  return value === 1 ? '⊤' : value === 0 ? '⊥' : 'N'
+}
+
 // Should be the same as the model display, just without the final column.
 const truth_table_display = (tt: TruthTable): HTMLElement => {
   // One column per sentence-letter
@@ -817,8 +825,7 @@ const truth_table_display = (tt: TruthTable): HTMLElement => {
     const row = el('tr', {})
     letters.forEach((l, idx) => {
       const isLast = idx === letters.length - 1
-      const letter_value = table_truth_value(tt, l, state_index)
-      const value_string = letter_value === 1 ? '⊤' : letter_value === 0 ? '⊥' : 'N'
+      const value_string = table_value_label(tt, l, state_index)
       row.appendChild(el('td', isLast ? { class: 'dv' } : {}, value_string))
     })
     row.appendChild(tel(TestId.state_row.state(state_index), 'td', {}, state_id(state_index)))
@@ -853,8 +860,7 @@ const model_display = (tt: TruthTable, model_assignments: Record<number, ModelAs
     const row = el('tr', {})
     letters.forEach((l, idx) => {
       const isLast = idx === letters.length - 1
-      const letter_value = table_truth_value(tt, l, state_index)
-      const value_string = letter_value === 1 ? '⊤' : letter_value === 0 ? '⊥' : 'N'
+      const value_string = table_value_label(tt, l, state_index)
       row.appendChild(el('td', isLast ? { class: 'dv' } : {}, value_string))
     })
     row.appendChild(tel(TestId.state_row.state(state_index), 'td', { class: 'dv' }, state_id(state_index)))
@@ -1259,7 +1265,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
   // Solver method selects the engine; semantic mode selects the interpretation
   // of the one object-language conditional.
   const solver_method = new Editable<SolverMethod>('z3')
-  const probability_semantics = new Editable<ProbabilitySemantics>('classical')
+  const probability_semantics = new Editable<ProbabilitySemantics>('twist-letk')
   const solver_method_select = tel(TestId.solver_method.select, 'select', { style: 'margin-left: 0.4em;' },
     el('option', { value: 'z3' }, 'SMT (Z3)'),
     el('option', { value: 'random' }, 'Random Search'),
@@ -1275,9 +1281,15 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
     type: 'checkbox',
     style: 'margin-left: 0.4em;',
   }) as HTMLInputElement
+  const letk_toggle = tel(TestId.solver_method.letk_toggle, 'input', {
+    type: 'checkbox',
+    checked: '',
+    style: 'margin-left: 0.4em;',
+  }) as HTMLInputElement
   const set_probability_semantics = (semantics: ProbabilitySemantics) => {
     trivalent_toggle.checked = semantics === 'trivalent-ers'
     trivalent_cck_toggle.checked = semantics === 'trivalent-cck'
+    letk_toggle.checked = semantics === 'twist-letk'
     probability_semantics.set(semantics)
   }
   trivalent_toggle.addEventListener('change', () => {
@@ -1286,18 +1298,21 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
   trivalent_cck_toggle.addEventListener('change', () => {
     set_probability_semantics(trivalent_cck_toggle.checked ? 'trivalent-cck' : 'classical')
   })
+  letk_toggle.addEventListener('change', () => {
+    set_probability_semantics(letk_toggle.checked ? 'twist-letk' : 'classical')
+  })
 
   // Random-search-only inputs. Visible only when solver_method === 'random'.
   const random_seed = new Editable<string>('')
   const seed_input = tel(TestId.solver_method.seed_input, 'input', { type: 'text', placeholder: '(auto)', style: 'margin-left: 0.4em; width: 12ch;' }) as HTMLInputElement
-  seed_input.addEventListener('change', () => { random_seed.set(seed_input.value) })
+  seed_input.addEventListener('input', () => { random_seed.set(seed_input.value) })
 
   const random_attempts = new Editable<number>(DEFAULT_SEARCH_ATTEMPTS)
   const attempts_input = tel(TestId.solver_method.attempts_input, 'input', {
     type: 'number', min: '1', max: '100', value: String(DEFAULT_SEARCH_ATTEMPTS),
     style: 'margin-left: 0.4em; width: 5ch;',
   }) as HTMLInputElement
-  attempts_input.addEventListener('change', () => {
+  attempts_input.addEventListener('input', () => {
     const n = Math.max(1, Math.min(100, parseInt(attempts_input.value) || DEFAULT_SEARCH_ATTEMPTS))
     attempts_input.value = String(n)
     random_attempts.set(n)
@@ -1346,6 +1361,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
   probability_semantics.watch(() => {
     trivalent_toggle.checked = probability_semantics.get() === 'trivalent-ers'
     trivalent_cck_toggle.checked = probability_semantics.get() === 'trivalent-cck'
+    letk_toggle.checked = probability_semantics.get() === 'twist-letk'
     invalidate()
   })
 
@@ -1364,6 +1380,10 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
         el('label', {},
           'Trivalent (CCK):',
           trivalent_cck_toggle,
+        ),
+        el('label', {},
+          'Twist (LET_K+):',
+          letk_toggle,
         ),
         el('label', {},
           'Regular:',
@@ -1578,7 +1598,9 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
     try {
       const truth_table = semantic_mode === 'trivalent-cck'
         ? new CCKTruthTable(variables_in_constraints(constraints))
-        : new TruthTable(variables_in_constraints(constraints))
+        : semantic_mode === 'twist-letk'
+          ? new LETKTruthTable(variables_in_constraints(constraints))
+          : new TruthTable(variables_in_constraints(constraints))
       const abort_controller = new AbortController()
       state2.set({ tag: 'looking', truth_table, abort_controller })
       model_container.innerHTML = ''
@@ -1638,6 +1660,8 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
                 ? build_rational_cooper_evaluator(result.rational_model)
                 : result.semantics === 'trivalent-cck'
                   ? build_rational_cck_evaluator(result.rational_model)
+                  : result.semantics === 'twist-letk'
+                    ? build_rational_letk_evaluator(result.rational_model)
                   : build_rational_evaluator(result.rational_model)
             }
             finish(result)
@@ -1666,6 +1690,14 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
             })
           : semantics === 'trivalent-cck'
             ? await cck_sat_wrapped(solver, truth_table, constraints, {
+              regular: is_regular,
+              timeout_ms: timeout_ms.get(),
+              abort_signal: abort_controller.signal,
+              cancel_fallback,
+              onTranslated: on_translated,
+            })
+          : semantics === 'twist-letk'
+            ? await letk_sat_wrapped(solver, truth_table, constraints, {
               regular: is_regular,
               timeout_ms: timeout_ms.get(),
               abort_signal: abort_controller.signal,
@@ -1830,6 +1862,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
     solver_method_select.disabled = state.tag === 'looking'
     trivalent_toggle.disabled = state.tag === 'looking'
     trivalent_cck_toggle.disabled = state.tag === 'looking'
+    letk_toggle.disabled = state.tag === 'looking'
     seed_input.disabled = state.tag === 'looking'
     attempts_input.disabled = state.tag === 'looking'
     maple_bridge_toggle.disabled = state.tag === 'looking' || !maple_bridge_available.get()
@@ -1874,6 +1907,8 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
           ? 'Trivalent (ERS) Random Search'
           : so.semantics === 'trivalent-cck'
             ? 'Trivalent (CCK) Random Search'
+            : so.semantics === 'twist-letk'
+              ? 'TwistPrSAT LET_K+ Random Search'
             : 'Random Search'
         const equation_engine = so.used_browser_equation_solver
           ? ' + browser algebra'
@@ -1895,6 +1930,11 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
         }, so.semantics === 'trivalent-cck'
           ? '(via Pr3SAT: CCK / Z3)'
           : '(via Pr3SAT: ERS / Z3)'))
+      } else if ('method' in so && so.method === 'twist') {
+        state_display.append(' ')
+        state_display.appendChild(tel(TestId.solver_method.badge, 'span', {
+          style: 'font-size: 0.85em; color: #555; margin-left: 0.6em;',
+        }, '(via TwistPrSAT: LET_K+ / Z3)'))
       }
 
       if (so.solver_output.status === 'sat') {
@@ -2141,7 +2181,15 @@ const main = (): HTMLElement => {
 
   return el('div', {},
     el('div', { class: 'header' },
-      el('div', { style: 'font-weight: bold; font-size: 1.5em;' }, 'PrSAT 3.1 (experimental)'),
+      el('div', { style: 'font-weight: bold; font-size: 1.5em;' }, 'TwistPrSAT'),
+      el('div', { class: 'header-intro' },
+        'A browser decision procedure and exact-model finder for probabilities over six-valued ',
+        el('span', {}, 'LET_K+'),
+        ' twist semantics. Use ○ (or o) for reliability, ~ for De Morgan negation, and ∼ (or cnot) for classical negation. ',
+        'Choose Z3 for the decision procedure or Random Search for exact rational witnesses using the hand-rolled browser equation solver. ',
+        el('a', { href: 'https://fitelson.org/' }, 'Branden Fitelson'),
+        '.',
+      ),
     ),
     // throw_button,
     global_error_display,
