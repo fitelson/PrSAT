@@ -93,9 +93,5 @@ export const timeout = readonly({
 })
 
 export const solver_method = readonly({
-  select: 'solver-method-select',
-  seed_input: 'random-seed-input',
-  attempts_input: 'random-attempts-input',
-  maple_bridge_toggle: 'maple-bridge-toggle',
   badge: 'solver-method-badge',
 })

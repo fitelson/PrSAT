@@ -10,11 +10,8 @@ satisfiability over the six-valued logic `LET_K+`. It is deployed at
 - `src/letk.ts`: six-valued twist tables, base-six valuation enumeration, and
   probability translation.
 - `src/letk_sat.ts`: Z3 adapter and model evaluator.
-- `src/random_search.ts`: Random Search, exact rational verification, and the
-  semantic adapter used by the worker.
-- `src/browser_equation_solver.ts`: hand-rolled browser equation solver.
-- `src/text_to_display.ts`: the public interface; semantics are always
-  `twist-letk`, while the user chooses only Z3 or Random Search.
+- `src/text_to_display.ts`: the Z3-only public interface; semantics are always
+  `twist-letk`.
 - `src/letk.spec.ts`: mathematical certificates derived from the paper.
 
 ## Syntax
@@ -28,10 +25,8 @@ satisfiability over the six-valued logic `LET_K+`. It is deployed at
 ## Solver boundary
 
 Z3 receives the direct finite-state probability translation plus ordinary
-normalization-state elimination. Random Search alone performs equation solving:
-browser algebra by default, or the optional local Maple bridge when explicitly
-selected. Random Search returns SAT only after exact rational verification and
-otherwise returns unknown except for an inconsistent exact linear subsystem.
+normalization-state elimination. This matches production PrSAT's public solver
+policy: no Random Search, browser equation solver, or Maple bridge is shipped.
 
 ## Resource bound
 
@@ -50,4 +45,4 @@ npm audit --omit=dev
 
 Deploy with `npm run deploy`, then verify HTTP 200, COOP/COEP headers, matching
 local/live Z3 WASM checksums, explicit Z3 readiness, and real-browser Z3 and
-Random Search solves. See `PROJECT_STATUS.md` for the latest verified state.
+model checks. See `PROJECT_STATUS.md` for the latest verified state.

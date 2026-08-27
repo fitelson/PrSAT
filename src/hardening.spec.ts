@@ -11,12 +11,6 @@ import {
 } from './pr_sat'
 import { LETKTruthTable, MAX_LETK_TRUTH_TABLE_LETTERS } from './letk'
 import { letk_sat_wrapped } from './letk_sat'
-import {
-  build_rational_letk_evaluator,
-  MAX_RANDOM_SEARCH_ATTEMPTS,
-  random_pr_sat,
-} from './random_search'
-import { ONE } from './rationalize'
 import { init_z3, run_solve_cancel_logic, WrappedSolver } from './z3_integration'
 import { sleep } from './utils'
 
@@ -36,18 +30,6 @@ describe('solver hardening', () => {
     const z3 = await init_z3()
     const result = await letk_sat_wrapped(new WrappedSolver(z3, init_z3), tt, cs)
     expect(result.solver_output.status).toBe('unsat')
-  })
-
-  test('TwistPrSAT Random Search evaluator preserves branch-local definedness', async () => {
-    const constraint = assert_parse_constraint('(1 = 1) ∨ (1 / 0 = 0)')
-    const tt = new LETKTruthTable(variables_in_constraints([constraint]))
-    await expect(build_rational_letk_evaluator({ 0: ONE })(tt, { tag: 'constraint', constraint }))
-      .resolves.toEqual({ tag: 'bool-result', result: true })
-  })
-
-  test('Random Search certifies a valid disjunction without evaluating its undefined branch', async () => {
-    const result = await random_pr_sat([assert_parse_constraint('(1 = 1) ∨ (1 / 0 = 0)')], { seed: 'branch-local', semantics: 'twist-letk' })
-    expect(result.solver_output.status).toBe('sat')
   })
 
   test('TwistPrSAT model evaluator recognizes a declared real variable', async () => {
@@ -83,13 +65,4 @@ describe('solver hardening', () => {
     expect(() => real_expr_to_smtlib(R.power(R.lit(2), R.lit(MAX_ABS_SOLVER_EXPONENT + 1)))).toThrow(/magnitude/)
   })
 
-  test('Random Search rejects excessive attempt counts', async () => {
-    await expect(random_pr_sat([C.eq(R.lit(1), R.lit(1))], { search_attempts: MAX_RANDOM_SEARCH_ATTEMPTS + 1, semantics: 'twist-letk' }))
-      .rejects.toThrow(/attempts/)
-  })
-
-  test('Random Search rejects excessive exponents before optimization', async () => {
-    const constraint = C.eq(R.power(R.lit(2), R.lit(MAX_ABS_SOLVER_EXPONENT + 1)), R.lit(0))
-    await expect(random_pr_sat([constraint], { semantics: 'twist-letk' })).rejects.toThrow(/magnitude/)
-  })
 })

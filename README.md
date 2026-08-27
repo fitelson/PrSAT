@@ -51,14 +51,9 @@ noncomplementarity. Users should copy or load one labeled block at a time.
 
 ## Solvers
 
-- **SMT (Z3)** is the decision-procedure path. Formulas are evaluated on all
+- **SMT (Z3)** is the sole decision procedure. Formulas are evaluated on all
   `6^m` valuations, probabilities become finite sums of nonnegative state
   masses, and the resulting real constraints are sent to Z3.
-- **Random Search** uses the inherited hand-rolled browser equation solver,
-  followed by numerical search, rational reconstruction, and exact
-  verification. It returns `SAT` only with an exact rational witness; failure
-  to find one is reported as `unknown`, never `UNSAT` (except for an
-  inconsistent exact linear subsystem).
 
 The current 4,096-state resource budget permits at most four distinct
 propositional letters in `LET_K+` mode (`6^4 = 1,296`).
@@ -85,10 +80,9 @@ This builds and uploads `dist/.` to
 ## Provenance
 
 TwistPrSAT is an isolated branch of PrSAT 3.1. It reuses the PrSAT parser,
-constraint language, Z3 integration, Random Search engine, browser equation
-solver, rational verifier, and UI. The `LET_K+` semantic core and solver
-adapter are in `src/letk.ts` and `src/letk_sat.ts`. The deployed application
-exposes only `LET_K+`; there are no alternative semantic modes.
+constraint language, Z3 integration, and UI. The `LET_K+` semantic core and
+solver adapter are in `src/letk.ts` and `src/letk_sat.ts`. Like production
+PrSAT, the deployed application is Z3-only.
 
 Contributors to the inherited PrSAT code include Koissi Adjorlolo, Branden
 Fitelson, Claude, and Codex.

@@ -5,15 +5,15 @@ Updated: 2026-08-27
 ## Current implementation
 
 - Separate local worktree on branch `twistprsat-full`, based on the current
-  experimental PrSAT `main` so both Z3 and Random Search are present.
+  PrSAT architecture and reduced to the production Z3-only solver policy.
 - Exact six-valued `LET_K+` semantics with values `T,t,b,f,F,n`, De Morgan
   negation, reliability, conjunction, disjunction, implication, and derived
   biconditional/classical negation.
 - Base-six truth tables and positive-extension probability translation.
-- Z3 adapter and Random Search adapter, including the hand-rolled browser
-  equation solver and exact rational verification.
+- Z3 adapter and model evaluator; Random Search, browser equation solving, and
+  Maple integration have been removed.
 - The public interface and production runtime expose only `LET_K+` twist
-  semantics. The only user-selectable choice is Z3 versus Random Search.
+  semantics through Z3; there is no solver selector.
 - The inherited three-valued semantic modules and tests have been removed from
   this dedicated worktree.
 - The public header contains a detailed quick-start guide covering syntax,
@@ -36,7 +36,7 @@ Updated: 2026-08-27
 - `npm run build`
 - full serialized Vitest suite
 - full Chromium Playwright suite
-- post-deployment HTTP, asset, Z3-ready, Z3-solve, and Random-Search checks
+- post-deployment HTTP, asset, Z3-ready, and Z3-solve checks
 
 ## Mathematical certificates
 
@@ -53,14 +53,13 @@ Updated: 2026-08-27
 - Figure 5 / Proposition 14's complete 36-cell two-formula partition and
   row/column marginals.
 - Z3 glut satisfiability and reliable-conflict unsatisfiability.
-- Random Search exact glut witness through browser algebra.
 
 ## Latest local verification
 
 - TypeScript and ESLint: passed.
 - Production build: passed.
-- Vitest: 738 passed, 1 skipped, 1 todo across 27 files.
-- Chromium Playwright: 28 passed, 1 intentionally skipped.
+- Vitest: 608 passed, 1 skipped, 1 todo across 14 files.
+- Chromium Playwright: 22 passed, 1 intentionally skipped.
 - Production dependency audit: 0 vulnerabilities.
 - Live HTTP and asset checks: passed with HTTP 200 and required COOP/COEP
   headers.
@@ -68,8 +67,6 @@ Updated: 2026-08-27
   `2765f5443a5a3a41aace71a82dd954e3b8c885a7d621b50122b1aede0dc8348a`.
 - Real-browser Z3 certificate: glut constraints SAT, six table rows displayed
   in order `T,t,b,f,F,n`, no console errors.
-- Real-browser Random Search certificate: SAT via browser algebra with fixed
-  seed `live-twist-certificate`, no console errors.
 
 ## Scope
 

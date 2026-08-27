@@ -4,10 +4,8 @@ import { assert, assert_exists, fallthrough, sleep } from "./utils";
 import { parse_constraint, parse_constraint_or_real_expr } from "./parser";
 import { constraint_to_string, letter_string, TruthTable, variables_in_constraints } from "./pr_sat";
 import { FancyEvaluatorOutput, init_z3, ModelAssignmentOutput, WrappedSolver, WrappedSolverResult } from "./z3_integration";
-import { build_rational_letk_evaluator, RandomPrSATResult, DEFAULT_SEARCH_ATTEMPTS, RandomSearchOptions } from "./random_search";
 import { LETKTruthTable, table_letk_value } from './letk';
 import { letk_sat_wrapped, LETKSATResult } from './letk_sat';
-import { ping_maple_bridge, random_search_equation_engine_options } from "./maple_bridge_client";
 import { s_to_string } from "./s";
 import { ConstraintOrRealExpr, PrSat } from "./types";
 import { InputBlockLogic } from "./display_logic";
@@ -24,8 +22,7 @@ import * as htmlToImage from 'html-to-image';
 const root = assert_exists(document.getElementById('app'), 'Root element with id \'#app\' doesn\'t exist!')
 
 type Constraint = PrSat['Constraint']
-type SolverMethod = 'z3' | 'random'
-type SolverResult = LETKSATResult | RandomPrSATResult
+type SolverResult = LETKSATResult
 // type RealExpr = PrSat['RealExpr']
 // type Sentence = PrSat['Sentence']
 
@@ -1257,79 +1254,10 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
   const timeout_input = timeout(timeout_ms)
   timeout_ms.watch((ms) => { console.log('timeout set to:', ms) })
 
-  // TwistPrSAT always uses LET_K+; this control selects only the solving engine.
-  const solver_method = new Editable<SolverMethod>('z3')
-  const solver_method_select = tel(TestId.solver_method.select, 'select', { style: 'margin-left: 0.4em;' },
-    el('option', { value: 'z3' }, 'SMT (Z3)'),
-    el('option', { value: 'random' }, 'Random Search'),
-  ) as HTMLSelectElement
-  solver_method_select.addEventListener('change', () => {
-    solver_method.set(solver_method_select.value as SolverMethod)
-  })
-  // Random-search-only inputs. Visible only when solver_method === 'random'.
-  const random_seed = new Editable<string>('')
-  const seed_input = tel(TestId.solver_method.seed_input, 'input', { type: 'text', placeholder: '(auto)', style: 'margin-left: 0.4em; width: 12ch;' }) as HTMLInputElement
-  seed_input.addEventListener('input', () => { random_seed.set(seed_input.value) })
-
-  const random_attempts = new Editable<number>(DEFAULT_SEARCH_ATTEMPTS)
-  const attempts_input = tel(TestId.solver_method.attempts_input, 'input', {
-    type: 'number', min: '1', max: '100', value: String(DEFAULT_SEARCH_ATTEMPTS),
-    style: 'margin-left: 0.4em; width: 5ch;',
-  }) as HTMLInputElement
-  attempts_input.addEventListener('input', () => {
-    const n = Math.max(1, Math.min(100, parseInt(attempts_input.value) || DEFAULT_SEARCH_ATTEMPTS))
-    attempts_input.value = String(n)
-    random_attempts.set(n)
-  })
-
-  // Local Maple bridge detection (optional; run `npm run maple-bridge`).
-  const maple_bridge_available = new Editable(false)
-  const use_maple_bridge = new Editable(false)
-  const maple_bridge_toggle = tel(TestId.solver_method.maple_bridge_toggle, 'input', {
-    type: 'checkbox',
-    disabled: '',
-    style: 'margin-left: 0.4em;',
-  }) as HTMLInputElement
-  maple_bridge_toggle.addEventListener('change', () => {
-    use_maple_bridge.set(maple_bridge_toggle.checked)
-    invalidate()
-  })
-  const maple_bridge_indicator = el('span', { style: 'margin-left: 0.4em; font-size: 0.85em; color: #888;' }, 'Maple bridge: checking…')
-  const refresh_maple_bridge = () => {
-    ping_maple_bridge().then((ok) => {
-      maple_bridge_available.set(ok)
-      if (!ok) {
-        maple_bridge_toggle.checked = false
-        use_maple_bridge.set(false)
-      }
-      maple_bridge_toggle.disabled = state2.get().tag === 'looking' || !ok
-      maple_bridge_indicator.textContent = ok ? 'Maple bridge: connected' : 'Maple bridge: off'
-      maple_bridge_indicator.style.color = ok ? '#1a7f37' : '#888'
-    }).catch(() => {})
-  }
-  refresh_maple_bridge()
-  maple_bridge_indicator.onclick = refresh_maple_bridge
-  maple_bridge_indicator.style.cursor = 'pointer'
-  maple_bridge_indicator.title = 'Click to re-check. Start with: npm run maple-bridge'
-
-  const random_options_row = el('div', { style: 'display: none; flex-wrap: wrap; gap: 0.8em; margin-top: 0.2em;' },
-    el('label', {}, 'Seed:', seed_input),
-    el('label', {}, 'Attempts:', attempts_input),
-    el('label', {}, 'Use Maple bridge:', maple_bridge_toggle),
-    maple_bridge_indicator,
-  )
-  solver_method.watch((m) => {
-    random_options_row.style.display = m === 'random' ? 'flex' : 'none'
-    invalidate()
-  })
   const generate_line = el('div', { style: 'display: flex; flex-direction: column;' },
     el('div', { style: 'display: flex;' },
       generate_button,
       el('div', { style: 'display: flex; flex-direction: column; margin-left: 0.4em;' },
-        el('label', {},
-          'Solver:',
-          solver_method_select,
-        ),
         el('label', {},
           'Regular:',
           regular_toggle,
@@ -1340,7 +1268,6 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
         ),
       ),
     ),
-    random_options_row,
   )
   
   const set_all_constraints = (all_constraints: Constraint[] | undefined) => {
@@ -1554,72 +1481,13 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
           constraints_view.appendChild(el('div', { style: 'margin-top: 0.4em;' }, e))
         }
       }
-      const run_random_search_in_worker = (): Promise<RandomPrSATResult> => new Promise((resolve) => {
-        const worker = new Worker(new URL('./random_search_worker.ts', import.meta.url), { type: 'module' })
-        const options: Partial<Omit<RandomSearchOptions, 'abort_signal' | 'onTranslated'>> = {
-          regular: is_regular,
-          semantics: 'twist-letk',
-          seed: random_seed.get() === '' ? undefined : random_seed.get(),
-          search_attempts: random_attempts.get(),
-          ...random_search_equation_engine_options(maple_bridge_available.get(), use_maple_bridge.get()),
-        }
-        const cancelled: RandomPrSATResult = {
-          constraints: { original: constraints, translated: [], extra: [], eliminated: [] },
-          smtlib_input: '; cancelled',
-          method: 'random',
-          semantics: 'twist-letk',
-          seed: random_seed.get(),
-          attempts_used: 0,
-          solver_output: { status: 'cancelled' },
-        }
-        let settled = false
-        const finish = (result: RandomPrSATResult) => {
-          if (settled) return
-          settled = true
-          abort_controller.signal.removeEventListener('abort', on_abort)
-          worker.terminate()
-          resolve(result)
-        }
-        const as_exception = (message: string): RandomPrSATResult => ({
-          ...cancelled,
-          smtlib_input: `; error: ${message}`,
-          solver_output: { status: 'exception', message },
-        })
-        const on_abort = () => finish(cancelled)
-        abort_controller.signal.addEventListener('abort', on_abort)
-        worker.onmessage = (event: MessageEvent) => {
-          if (settled) return
-          const msg = event.data
-          if (msg.tag === 'translated') {
-            on_translated(msg.translated)
-          } else if (msg.tag === 'done') {
-            const result: RandomPrSATResult = msg.result
-            // Rebuild the non-cloneable evaluator from the exact rational model.
-            if (result.solver_output.status === 'sat' && result.rational_model !== undefined) {
-              result.solver_output.evaluate = build_rational_letk_evaluator(result.rational_model)
-            }
-            finish(result)
-          } else if (msg.tag === 'error') {
-            finish(as_exception(msg.message))
-          }
-        }
-        worker.onerror = (event: ErrorEvent) => {
-          event.preventDefault()
-          finish(as_exception(event.message || 'Random Search worker crashed.'))
-        }
-        worker.onmessageerror = () => finish(as_exception('Random Search worker returned an unreadable message.'))
-        worker.postMessage({ constraints, variables: truth_table.variables, options })
+      const result: SolverResult = await letk_sat_wrapped(solver, truth_table, constraints, {
+        regular: is_regular,
+        timeout_ms: timeout_ms.get(),
+        abort_signal: abort_controller.signal,
+        cancel_fallback,
+        onTranslated: on_translated,
       })
-      const method = solver_method.get()
-      const result: SolverResult = method === 'random'
-        ? await run_random_search_in_worker()
-        : await letk_sat_wrapped(solver, truth_table, constraints, {
-            regular: is_regular,
-            timeout_ms: timeout_ms.get(),
-            abort_signal: abort_controller.signal,
-            cancel_fallback,
-            onTranslated: on_translated,
-          })
       state2.set({ tag: 'finished', truth_table, solver_output: result })
       // const { status, all_constraints, model } = result
       // if (result.solver_output.status === 'sat') {
@@ -1768,10 +1636,6 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
     model_part.classList.remove('invalidated')
     cancel_button.disabled = true
     regular_toggle.disabled = state.tag === 'looking'
-    solver_method_select.disabled = state.tag === 'looking'
-    seed_input.disabled = state.tag === 'looking'
-    attempts_input.disabled = state.tag === 'looking'
-    maple_bridge_toggle.disabled = state.tag === 'looking' || !maple_bridge_available.get()
     for (const input of timeout_input.getElementsByTagName('input')) {
       input.disabled = state.tag === 'looking'
     }
@@ -1807,22 +1671,7 @@ const model_finder_display = (constraint_block: InputBlockLogic<Constraint, Spli
       state_display.innerHTML = ''
       state_display.append(status_label)
 
-      // Random-search badge: method / seed / attempts_used.
-      if ('method' in so && so.method === 'random') {
-        const equation_engine = so.used_browser_equation_solver
-          ? ' + browser algebra'
-          : so.used_maple_bridge ? ' + Maple bridge' : ''
-        const badge_parts: string[] = [`via TwistPrSAT LET_K+ Random Search${equation_engine}`]
-        badge_parts.push(`seed: ${so.seed}`)
-        badge_parts.push(`attempt ${so.attempts_used}/${so.attempts_used > 0 ? so.attempts_used : 1}`)
-        if (so.final_fmin !== undefined && Number.isFinite(so.final_fmin)) {
-          badge_parts.push(`best f=${so.final_fmin.toExponential(2)}`)
-        }
-        state_display.append(' ')
-        state_display.appendChild(tel(TestId.solver_method.badge, 'span', {
-          style: 'font-size: 0.85em; color: #555; margin-left: 0.6em;',
-        }, `(${badge_parts.join(', ')})`))
-      } else if ('method' in so && so.method === 'twist') {
+      if ('method' in so && so.method === 'twist') {
         state_display.append(' ')
         state_display.appendChild(tel(TestId.solver_method.badge, 'span', {
           style: 'font-size: 0.85em; color: #555; margin-left: 0.6em;',
@@ -2125,8 +1974,8 @@ const main = (): HTMLElement => {
             el('code', {}, '~A & ○A'), ', and ', el('code', {}, '∼(A v ~A)'), '.',
           ),
           el('li', {},
-            'Choose “SMT (Z3)” for the decision-procedure path. Choose “Random Search” to ask the hand-rolled browser equation solver and numerical search to produce an exact rational witness. ',
-            'Random Search reports SAT only after exact verification; an unsuccessful search reports unknown rather than UNSAT.',
+            'TwistPrSAT uses the same production solver policy as PrSAT: every query is translated directly to quantifier-free real arithmetic and decided by Z3. ',
+            'A SAT result includes a model; UNSAT means that no probability model satisfies the entered constraints; unknown means that Z3 reached its configured resource limit.',
           ),
           el('li', {},
             el('code', {}, 'Pr(B | A)'), ' means ', el('code', {}, 'Pr(B & A) / Pr(A)'), ' and therefore requires ',

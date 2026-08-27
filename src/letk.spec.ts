@@ -16,7 +16,6 @@ import {
 import { constraint_builder, real_expr_builder, sentence_builder, variables_in_constraints } from './pr_sat'
 import { letk_sat_wrapped } from './letk_sat'
 import { init_z3, WrappedSolver } from './z3_integration'
-import { random_pr_sat_wrapped } from './random_search'
 import { PrSat } from './types'
 
 type Sentence = PrSat['Sentence']
@@ -278,23 +277,5 @@ describe('TwistPrSAT solvers', () => {
     ]
     const impossible_table = new LETKTruthTable(variables_in_constraints(impossible_constraints))
     expect((await letk_sat_wrapped(solver, impossible_table, impossible_constraints)).solver_output.status).toBe('unsat')
-  })
-
-  test('Random Search uses the browser equation solver to return an exact glut witness', async () => {
-    const constraints = [
-      assert_parse_constraint('Pr(A) = 1'),
-      assert_parse_constraint('Pr(~A) = 1'),
-      assert_parse_constraint('Pr(○A) = 0'),
-    ]
-    const table = new LETKTruthTable(variables_in_constraints(constraints))
-    const result = await random_pr_sat_wrapped(table, constraints, {
-      semantics: 'twist-letk',
-      search_attempts: 1,
-      seed: 'twist-glut-certificate',
-      browser_equation_solver: true,
-    })
-    expect(result.solver_output.status).toBe('sat')
-    expect(result.used_browser_equation_solver).toBe(true)
-    expect(result.rational_model?.[2]).toEqual({ n: 1n, d: 1n })
   })
 })

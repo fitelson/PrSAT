@@ -96,100 +96,6 @@ test('public model and theorem example files are linked and ready to load', asyn
   expect((await theorem_challenge.text()).trim()).toBe('Pr(A) + Pr(B) != Pr(A & B) + Pr(A v B)')
 })
 
-test('TwistPrSAT Random Search uses browser algebra for an exact glut witness', async ({ page }) => {
-  await load_app(page)
-  const test_ids = TestId.generic_multi_input('constraints')
-  await set_block_input(page, test_ids, ['Pr(A) = 1', 'Pr(~A) = 1', 'Pr(○A) = 0'])
-  await page.getByTestId(TestId.solver_method.select).selectOption('random')
-  await page.getByTestId(TestId.solver_method.seed_input).fill('twist-e2e-glut')
-  await find_model(page, 'sat', DEFAULT_TIMEOUT)
-
-  const badge = page.getByTestId(TestId.solver_method.badge)
-  await expect(badge).toContainText('TwistPrSAT LET_K+ Random Search')
-  await expect(badge).toContainText('browser algebra')
-  await expect(badge).toContainText('seed: twist-e2e-glut')
-})
-
-test('random search SAT for Pr(A) = 1/2', async ({ page }) => {
-  await to_load(page)
-  const test_ids = TestId.generic_multi_input('constraints')
-
-  const single_input = page.getByTestId(test_ids.split.single.get(0))
-  await single_input.getByTestId(test_ids.split.input).fill('Pr(A) = 1/2')
-
-  // Switch solver to random search.
-  const solver_select = page.getByTestId(TestId.solver_method.select)
-  await solver_select.selectOption('random')
-
-  // Seed + attempts inputs should appear.
-  await expect(page.getByTestId(TestId.solver_method.seed_input)).toBeVisible()
-  await expect(page.getByTestId(TestId.solver_method.attempts_input)).toBeVisible()
-
-  // Use a fixed seed so the run is reproducible.
-  await page.getByTestId(TestId.solver_method.seed_input).fill('e2e-sat-half')
-
-  await page.getByTestId(TestId.find_model).click()
-
-  await expect(page.getByText(Constants.SAT)).toBeVisible({ timeout: DEFAULT_TIMEOUT })
-  const badge = page.getByTestId(TestId.solver_method.badge)
-  await expect(badge).toBeVisible()
-  await expect(badge).toContainText('Random Search')
-  await expect(badge).toContainText('e2e-sat-half')
-})
-
-test('random search returns unknown for irrational constraint', async ({ page }) => {
-  await to_load(page)
-  const test_ids = TestId.generic_multi_input('constraints')
-
-  const single_input = page.getByTestId(test_ids.split.single.get(0))
-  // Pr(A)^2 = 1/2 → Pr(A) = sqrt(1/2), irrational; random search returns unknown.
-  await single_input.getByTestId(test_ids.split.input).fill('Pr(A)^2 = 1/2')
-
-  const solver_select = page.getByTestId(TestId.solver_method.select)
-  await solver_select.selectOption('random')
-  await page.getByTestId(TestId.solver_method.seed_input).fill('e2e-irrational')
-
-  await page.getByTestId(TestId.find_model).click()
-  await expect(page.getByText(Constants.UNKNOWN)).toBeVisible({ timeout: DEFAULT_TIMEOUT })
-})
-
-test('solver dropdown shows options only for Random Search', async ({ page }) => {
-  await page.route('http://127.0.0.1:31415/ping', async (route) => await route.abort())
-  await to_load(page)
-
-  // Default: Z3 selected, random options hidden.
-  await expect(page.getByTestId(TestId.solver_method.seed_input)).not.toBeVisible()
-  const maple_bridge = page.getByTestId(TestId.solver_method.maple_bridge_toggle)
-  await expect(maple_bridge).not.toBeVisible()
-
-  const solver_select = page.getByTestId(TestId.solver_method.select)
-  await solver_select.selectOption('random')
-  await expect(page.getByTestId(TestId.solver_method.seed_input)).toBeVisible()
-  await expect(maple_bridge).toBeVisible()
-  await expect(maple_bridge).not.toBeChecked()
-  await expect(maple_bridge).toBeDisabled()
-
-  await solver_select.selectOption('z3')
-  await expect(page.getByTestId(TestId.solver_method.seed_input)).not.toBeVisible()
-  await expect(maple_bridge).not.toBeVisible()
-})
-
-test('Maple bridge can be selected only when it is connected', async ({ page }) => {
-  await page.route('http://127.0.0.1:31415/ping', async (route) => await route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    headers: { 'Access-Control-Allow-Origin': '*' },
-    body: JSON.stringify({ ok: true }),
-  }))
-  await to_load(page)
-  await page.getByTestId(TestId.solver_method.select).selectOption('random')
-  const maple_bridge = page.getByTestId(TestId.solver_method.maple_bridge_toggle)
-  await expect(maple_bridge).toBeEnabled()
-  await expect(maple_bridge).not.toBeChecked()
-  await maple_bridge.check()
-  await expect(maple_bridge).toBeChecked()
-})
-
 test('editing a parsed constraint immediately disables stale solving', async ({ page }) => {
   await to_load(page)
   const test_ids = TestId.generic_multi_input('constraints')
@@ -204,15 +110,6 @@ test('editing a parsed constraint immediately disables stale solving', async ({ 
   await expect(find_button).toBeDisabled()
 })
 
-test('Random Search short-circuits an undefined disjunct', async ({ page }) => {
-  await to_load(page)
-  const test_ids = TestId.generic_multi_input('constraints')
-  const input = page.getByTestId(test_ids.split.single.get(0)).getByTestId(test_ids.split.input)
-  await input.fill('(1 = 1) ∨ (1 / 0 = 0)')
-  await page.getByTestId(TestId.solver_method.select).selectOption('random')
-  await find_model(page, 'sat')
-})
-
 test('TwistPrSAT rejects a truth table that exceeds the local resource limit', async ({ page }) => {
   await to_load(page)
   const test_ids = TestId.generic_multi_input('constraints')
@@ -222,11 +119,10 @@ test('TwistPrSAT rejects a truth table that exceeds the local resource limit', a
   await expect(page.getByTestId(TestId.state_display_id)).toContainText('TwistPrSAT supports at most 4')
 })
 
-test('the only user-selectable mode is the solving engine', async ({ page }) => {
+test('public TwistPrSAT exposes only the Z3 decision procedure', async ({ page }) => {
   await to_load(page)
-  const solver_select = page.getByTestId(TestId.solver_method.select)
-  await expect(solver_select.locator('option')).toHaveCount(2)
-  await expect(solver_select.locator('option')).toHaveText(['SMT (Z3)', 'Random Search'])
+  await expect(page.locator('select')).toHaveCount(0)
+  await expect(page.getByText(/Random Search|Maple bridge|browser algebra/)).toHaveCount(0)
 })
 
 test('arithmetic-only constraints do not show a probability table', async ({ page }) => {

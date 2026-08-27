@@ -17,14 +17,13 @@ Notation:
   cnot A   classical negation, defined as A -> false
   Pr(A)    positive probability of A
 
-Select SMT (Z3) for every UNSAT challenge.  Random Search can certify SAT by
-returning an exact rational witness, but an unsuccessful random search means
-unknown rather than UNSAT.
+TwistPrSAT uses Z3 for every example.  Z3 returns SAT with a model, UNSAT when
+no probability model exists, or unknown if it reaches its resource limit.
 
 
 EXAMPLE 00: UNIFORM SIX-REGION MODEL
 File: TwistPrSAT_examples.txt
-Expected result: SAT in Z3 and Random Search.
+Expected result: SAT in Z3.
 
 This model assigns probability 1/6 to each of the six regions B°, B, C, D, D°,
 and U.  The remaining lines check the derived positive, negative, reliability,

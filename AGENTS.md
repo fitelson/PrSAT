@@ -8,8 +8,6 @@ PrSAT checkouts unless Branden explicitly asks for a shared family change.
 - Server target: `/home/fitelson/www/www/PrSAT/twist/`
 - Semantics: `src/letk.ts`
 - Z3 adapter: `src/letk_sat.ts`
-- Random Search and hand-rolled equation solver: `src/random_search.ts` and
-  `src/browser_equation_solver.ts`
 
 Use `~` for De Morgan negation, `○`/`o` for reliability, and `∼`/`cnot` for
 classical negation. Keep the mathematical truth-table certificates in
@@ -18,4 +16,4 @@ classical negation. Keep the mathematical truth-table certificates in
 Before deployment, run TypeScript, lint, build, the full serialized unit
 suite, and Chromium Playwright. After deployment, require HTTP 200, matching
 local/live Z3 WASM checksums, explicit Z3 readiness, and successful live Z3
-and Random Search solves.
+solves. The public app is Z3-only; do not reintroduce a solver selector.
