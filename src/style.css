@@ -398,6 +398,40 @@ input::file-selector-button:hover {
   color: white;
 }
 
+.header-intro {
+  max-width: 92em;
+}
+
+.header-intro p {
+  margin: 0.45em 0;
+}
+
+.header-intro .usage-title {
+  font-weight: 700;
+  font-size: 1.08em;
+  margin-top: 0.7em;
+}
+
+.header-intro .usage-list {
+  margin: 0.35em 0 0.55em 1.4em;
+  padding: 0;
+}
+
+.header-intro .usage-list li {
+  margin: 0.3em 0;
+}
+
+.header-intro code {
+  background: rgba(255, 255, 255, 0.14);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.header-intro .usage-credit {
+  color: #dfe6e9;
+  font-size: 0.94em;
+}
+
 /* Global error display */
 .global-error {
   border-radius: 10px;

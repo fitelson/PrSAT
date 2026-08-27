@@ -12,8 +12,13 @@ Updated: 2026-08-27
 - Base-six truth tables and positive-extension probability translation.
 - Z3 adapter and Random Search adapter, including the hand-rolled browser
   equation solver and exact rational verification.
-- TwistPrSAT is the default semantic mode; inherited Classical, ERS, and CCK
-  comparison modes remain available.
+- The public interface and production runtime expose only `LET_K+` twist
+  semantics. The only user-selectable choice is Z3 versus Random Search.
+- The inherited three-valued semantic modules and tests have been removed from
+  this dedicated worktree.
+- The public header contains a detailed quick-start guide covering syntax,
+  coordinates, six region formulas, solvers, regularity, definedness, resource
+  limits, and model evaluation.
 - Public deployment completed at `https://fitelson.org/PrSAT/twist/`.
 
 ## Verification gate
@@ -46,8 +51,8 @@ Updated: 2026-08-27
 
 - TypeScript and ESLint: passed.
 - Production build: passed.
-- Vitest: 764 passed, 1 skipped, 1 todo across 28 files.
-- Chromium Playwright: 29 passed, 1 intentionally skipped.
+- Vitest: 732 passed, 1 skipped, 1 todo across 25 files.
+- Chromium Playwright: 27 passed, 1 intentionally skipped.
 - Production dependency audit: 0 vulnerabilities.
 - Live HTTP and asset checks: passed with HTTP 200 and required COOP/COEP
   headers.

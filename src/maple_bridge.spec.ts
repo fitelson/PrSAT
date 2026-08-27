@@ -19,13 +19,6 @@ const indep_lines = [
   "Pr(X & Z & U) = Pr(X) * Pr(Z) * Pr(U)", "Pr(Y & Z & U) = Pr(Y) * Pr(Z) * Pr(U)",
   "Pr(X & Y & Z & U) != Pr(X) * Pr(Y) * Pr(Z) * Pr(U)",
 ]
-const trivalent_branch_lines = [
-  "Pr(P -> Q) = 1/4",
-  "Pr(Q) = 1/6",
-  "Pr(Q -> P) = 1",
-  "Pr(P) = 2/3",
-]
-
 // These tests exercise the LOCAL Maple bridge (npm run maple-bridge). They
 // self-skip when the bridge is not running, so CI / bridge-less runs pass.
 describe('maple bridge end-to-end', () => {
@@ -94,32 +87,4 @@ describe('maple bridge end-to-end', () => {
       expect(max_den <= 10_000n).toBe(true)
     }
   }, 600_000)
-  test('trivalent branch search substitutes state indices inside zero-denominator cases', async () => {
-    if (!bridge_up) return
-    const constraints = trivalent_branch_lines.map((l) => (parse_constraint(l) as any)[1])
-    const result = await random_pr_sat(constraints, {
-      seed: 'tri-branch',
-      semantics: 'trivalent-ers',
-      search_attempts: 3,
-      browser_equation_solver: false,
-      maple_bridge_url: 'http://127.0.0.1:31415',
-    })
-    expect(result.solver_output.status).toBe('sat')
-    expect(result.used_maple_bridge).toBe(true)
-    expect(result.rational_model).toBeDefined()
-  }, 120_000)
-  test('CCK Santorio constraints use Maple equations and certify the boundary model', async () => {
-    if (!bridge_up) return
-    const constraints = trivalent_branch_lines.map((l) => (parse_constraint(l) as any)[1])
-    const result = await random_pr_sat(constraints, {
-      seed: 'cck-santorio',
-      semantics: 'trivalent-cck',
-      search_attempts: 3,
-      browser_equation_solver: false,
-      maple_bridge_url: 'http://127.0.0.1:31415',
-    })
-    expect(result.solver_output.status).toBe('sat')
-    expect(result.used_maple_bridge).toBe(true)
-    expect(result.rational_model).toBeDefined()
-  }, 120_000)
 })

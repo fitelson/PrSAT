@@ -65,14 +65,7 @@ import {
   FancyEvaluatorOutput, ModelAssignmentOutput, WrappedSolverResult,
 } from './z3_integration'
 import {
-  translate_constraints_cooper,
-  translate_constraint_or_real_expr_cooper,
-} from './cooper'
-import {
-  translate_constraints_cck,
-  translate_constraint_or_real_expr_cck,
-} from './cck'
-import {
+  LETKTruthTable,
   translate_constraints_letk,
   translate_constraint_or_real_expr_letk,
 } from './letk'
@@ -85,7 +78,7 @@ export const DEFAULT_SEARCH_ATTEMPTS = 3
 export const DEFAULT_MAX_RATIONALIZE_ATTEMPTS = 40
 export const MAX_RANDOM_SEARCH_ATTEMPTS = 100
 export const MAX_RANDOM_RATIONALIZE_ATTEMPTS = 200
-export type ProbabilitySemantics = 'classical' | 'trivalent-ers' | 'trivalent-cck' | 'twist-letk'
+export type ProbabilitySemantics = 'classical' | 'twist-letk'
 
 // Numeric acceptance threshold. Non-strict inequalities sitting exactly on
 // their boundary (e.g. a state pinned to 0 by a certainty constraint) have
@@ -163,13 +156,9 @@ export type RandomPrSATResult = {
 
 const describe_run = (opts: RandomSearchOptions, seed: string, attempts_used: number, status: string, fmin?: number): string => {
   const lines = [
-    opts.semantics === 'trivalent-ers'
-      ? `; Trivalent (ERS) Random Search run`
-      : opts.semantics === 'trivalent-cck'
-        ? `; Trivalent (CCK) Random Search run`
-        : opts.semantics === 'twist-letk'
-          ? `; TwistPrSAT LET_K+ Random Search run`
-        : `; PrSAT Random Search run`,
+    opts.semantics === 'twist-letk'
+      ? `; TwistPrSAT LET_K+ Random Search run`
+      : `; PrSAT Random Search run`,
     `; semantics = ${opts.semantics}`,
     `; seed = ${seed}`,
     `; search_attempts = ${opts.search_attempts}`,
@@ -295,66 +284,6 @@ export const build_rational_evaluator = (
   return { tag: 'result', result: rational_to_model_assignment(result.value) }
 }
 
-export const build_rational_cooper_evaluator = (
-  rational_assignments: Record<number, Rational>,
-) => async (evt_tt: TruthTable, c_or_re: ConstraintOrRealExpr): Promise<FancyEvaluatorOutput> => {
-  const declared_letters = new LetterSet([...evt_tt.letters()])
-  const free_sent = free_variables_in_constraint_or_real_expr(c_or_re, new LetterSet(), declared_letters)
-  const free_real = free_real_variables_in_constraint_or_real_expr(c_or_re, new Set())
-  for (const declared of evt_tt.variables.real) free_real.delete(declared)
-  if (!free_sent.is_empty() || free_real.size > 0) {
-    return { tag: 'undeclared-vars', variables: { sentence: [...free_sent], real: [...free_real] } }
-  }
-
-  const translated_c_or_re = translate_constraint_or_real_expr_cooper(evt_tt, c_or_re)
-  if (translated_c_or_re.tag === 'constraint') {
-    const guarded = guard_div0_conditions_in_constraint(translated_c_or_re.constraint)
-    const result = evaluate_constraint_rational(guarded, rational_assignments)
-    if (result.tag !== 'ok') return { tag: 'div0' }
-    return { tag: 'bool-result', result: result.value }
-  }
-  const div0s = div0_conditions_in_constraint_or_real_expr(translated_c_or_re)
-  for (const c of div0s) {
-    const result = evaluate_constraint_rational(c, rational_assignments)
-    if (result.tag !== 'ok') return { tag: 'div0' }
-    if (result.value === false) return { tag: 'div0' }
-  }
-
-  const result = evaluate_real_expr_rational(translated_c_or_re.real_expr, rational_assignments)
-  if (result.tag !== 'ok') return { tag: 'div0' }
-  return { tag: 'result', result: rational_to_model_assignment(result.value) }
-}
-
-export const build_rational_cck_evaluator = (
-  rational_assignments: Record<number, Rational>,
-) => async (evt_tt: TruthTable, c_or_re: ConstraintOrRealExpr): Promise<FancyEvaluatorOutput> => {
-  const declared_letters = new LetterSet([...evt_tt.letters()])
-  const free_sent = free_variables_in_constraint_or_real_expr(c_or_re, new LetterSet(), declared_letters)
-  const free_real = free_real_variables_in_constraint_or_real_expr(c_or_re, new Set())
-  for (const declared of evt_tt.variables.real) free_real.delete(declared)
-  if (!free_sent.is_empty() || free_real.size > 0) {
-    return { tag: 'undeclared-vars', variables: { sentence: [...free_sent], real: [...free_real] } }
-  }
-
-  const translated_c_or_re = translate_constraint_or_real_expr_cck(evt_tt, c_or_re)
-  if (translated_c_or_re.tag === 'constraint') {
-    const guarded = guard_div0_conditions_in_constraint(translated_c_or_re.constraint)
-    const result = evaluate_constraint_rational(guarded, rational_assignments)
-    if (result.tag !== 'ok') return { tag: 'div0' }
-    return { tag: 'bool-result', result: result.value }
-  }
-  const div0s = div0_conditions_in_constraint_or_real_expr(translated_c_or_re)
-  for (const c of div0s) {
-    const result = evaluate_constraint_rational(c, rational_assignments)
-    if (result.tag !== 'ok') return { tag: 'div0' }
-    if (result.value === false) return { tag: 'div0' }
-  }
-
-  const result = evaluate_real_expr_rational(translated_c_or_re.real_expr, rational_assignments)
-  if (result.tag !== 'ok') return { tag: 'div0' }
-  return { tag: 'result', result: rational_to_model_assignment(result.value) }
-}
-
 export const build_rational_letk_evaluator = (
   rational_assignments: Record<number, Rational>,
 ) => async (evt_tt: TruthTable, c_or_re: ConstraintOrRealExpr): Promise<FancyEvaluatorOutput> => {
@@ -385,13 +314,9 @@ const build_rational_semantic_evaluator = (
   semantics: ProbabilitySemantics,
   assignments: Record<number, Rational>,
 ) =>
-  semantics === 'trivalent-ers'
-    ? build_rational_cooper_evaluator(assignments)
-    : semantics === 'trivalent-cck'
-      ? build_rational_cck_evaluator(assignments)
-      : semantics === 'twist-letk'
-        ? build_rational_letk_evaluator(assignments)
-      : build_rational_evaluator(assignments)
+  semantics === 'twist-letk'
+    ? build_rational_letk_evaluator(assignments)
+    : build_rational_evaluator(assignments)
 
 // ---------- Maple-bridge branch search ----------
 
@@ -561,13 +486,9 @@ export const random_pr_sat_wrapped = async (
   }
 
   const random = new Random(opts.seed)
-  const translated = opts.semantics === 'trivalent-ers'
-    ? translate_constraints_cooper(tt, constraints)
-    : opts.semantics === 'trivalent-cck'
-      ? translate_constraints_cck(tt, constraints)
-      : opts.semantics === 'twist-letk'
-        ? translate_constraints_letk(tt, constraints)
-      : translate(tt, constraints)
+  const translated = opts.semantics === 'twist-letk'
+    ? translate_constraints_letk(tt, constraints)
+    : translate(tt, constraints)
   // Validate solver-language restrictions (especially integer exponent shape
   // and magnitude) before any numeric or polynomial work begins.
   for (const constraint of translated) constraint_to_smtlib(constraint)
@@ -1037,7 +958,9 @@ export const random_pr_sat = async (
   constraints: Constraint[],
   options?: Partial<RandomSearchOptions>,
 ): Promise<RandomPrSATResult> => {
-  const tt = new TruthTable(variables_in_constraints(constraints))
+  const tt = options?.semantics === 'twist-letk'
+    ? new LETKTruthTable(variables_in_constraints(constraints))
+    : new TruthTable(variables_in_constraints(constraints))
   return random_pr_sat_wrapped(tt, constraints, options)
 }
 

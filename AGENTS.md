@@ -1,8 +1,7 @@
 # TwistPrSAT instructions
 
-This is the isolated TwistPrSAT worktree. Do not propagate changes into the
-PrSAT experimental or public trivalent checkouts unless Branden explicitly
-asks for a shared family change.
+This is the isolated TwistPrSAT worktree. Do not propagate changes into sibling
+PrSAT checkouts unless Branden explicitly asks for a shared family change.
 
 - Branch: `twistprsat-full`
 - Live app: `https://fitelson.org/PrSAT/twist/`
@@ -20,4 +19,3 @@ Before deployment, run TypeScript, lint, build, the full serialized unit
 suite, and Chromium Playwright. After deployment, require HTTP 200, matching
 local/live Z3 WASM checksums, explicit Z3 readiness, and successful live Z3
 and Random Search solves.
-

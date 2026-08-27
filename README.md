@@ -73,7 +73,8 @@ This builds and uploads `dist/.` to
 TwistPrSAT is an isolated branch of PrSAT 3.1. It reuses the PrSAT parser,
 constraint language, Z3 integration, Random Search engine, browser equation
 solver, rational verifier, and UI. The `LET_K+` semantic core and solver
-adapter are in `src/letk.ts` and `src/letk_sat.ts`.
+adapter are in `src/letk.ts` and `src/letk_sat.ts`. The deployed application
+exposes only `LET_K+`; there are no alternative semantic modes.
 
 Contributors to the inherited PrSAT code include Koissi Adjorlolo, Branden
 Fitelson, Claude, and Codex.

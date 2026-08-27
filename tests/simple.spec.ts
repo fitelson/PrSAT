@@ -13,22 +13,21 @@ const load_app = async (page: Page): Promise<void> => {
 
 const to_load = async (page: Page): Promise<void> => {
   await load_app(page)
-  const letk = page.getByTestId(TestId.solver_method.letk_toggle)
-  if (await letk.isChecked()) await letk.uncheck()
 }
 
 const find_model = async (page: Page, with_result: 'sat' | 'unsat' | 'unknown' | 'cancelled', timeout_ms?: number) => {
   const state_display = page.getByTestId(TestId.state_display_id)
+  const result_timeout = timeout_ms ?? DEFAULT_TIMEOUT
   await page.getByTestId(TestId.find_model).click()
   // Right after we click, we want to be searching!
   await state_display.getByText(Constants.SEARCH).isVisible()
 
   if (with_result === 'sat') {
-    await expect(state_display).toContainText(Constants.SAT, { timeout: timeout_ms })
+    await expect(state_display).toContainText(Constants.SAT, { timeout: result_timeout })
   } else if (with_result === 'unsat') {
-    await expect(state_display).toContainText(Constants.UNSAT, { timeout: timeout_ms })
+    await expect(state_display).toContainText(Constants.UNSAT, { timeout: result_timeout })
   } else if (with_result === 'unknown') {
-    await expect(state_display).toContainText(Constants.UNKNOWN, { timeout: timeout_ms })
+    await expect(state_display).toContainText(Constants.UNKNOWN, { timeout: result_timeout })
   } else if (with_result === 'cancelled') {
     // expect(state_display).toContainText(Constants.CANCELLED)
   } else {
@@ -53,7 +52,7 @@ test('single constraint', async ({ page }) => {
 test('TwistPrSAT defaults to LET_K+ and solves a glut with Z3', async ({ page }) => {
   await load_app(page)
   await expect(page.getByText('TwistPrSAT', { exact: true })).toBeVisible()
-  await expect(page.getByTestId(TestId.solver_method.letk_toggle)).toBeChecked()
+  await expect(page.getByText(/Trivalent \(ERS\)|Trivalent \(CCK\)/)).toHaveCount(0)
 
   const test_ids = TestId.generic_multi_input('constraints')
   await set_block_input(page, test_ids, ['Pr(A) = 1', 'Pr(~A) = 1', 'Pr(○A) = 0'])
@@ -180,35 +179,20 @@ test('Random Search short-circuits an undefined disjunct', async ({ page }) => {
   await find_model(page, 'sat')
 })
 
-test('CCK rejects a truth table that exceeds the local resource limit', async ({ page }) => {
+test('TwistPrSAT rejects a truth table that exceeds the local resource limit', async ({ page }) => {
   await to_load(page)
   const test_ids = TestId.generic_multi_input('constraints')
   const input = page.getByTestId(test_ids.split.single.get(0)).getByTestId(test_ids.split.input)
-  await input.fill('Pr(A & B & C & D & E & F & G & H) = 1')
-  await page.getByTestId(TestId.solver_method.trivalent_cck_toggle).check()
+  await input.fill('Pr(A & B & C & D & E) = 1')
   await page.getByTestId(TestId.find_model).click()
-  await expect(page.getByTestId(TestId.state_display_id)).toContainText('CCK mode supports at most 7')
+  await expect(page.getByTestId(TestId.state_display_id)).toContainText('TwistPrSAT supports at most 4')
 })
 
-test('trivalent toggle runs through the visible selector', async ({ page }) => {
+test('the only user-selectable mode is the solving engine', async ({ page }) => {
   await to_load(page)
-  const test_ids = TestId.generic_multi_input('constraints')
-
-  const single_input = page.getByTestId(test_ids.split.single.get(0))
-  await single_input.getByTestId(test_ids.split.input).fill('Pr((A -> B) & C) > Pr(A -> B)')
-
   const solver_select = page.getByTestId(TestId.solver_method.select)
-  await solver_select.selectOption('z3')
-  await page.getByTestId(TestId.solver_method.trivalent_toggle).check()
-  await expect(page.getByTestId(TestId.solver_method.seed_input)).not.toBeVisible()
-
-  await page.getByTestId(TestId.find_model).click()
-  await expect(page.getByText(Constants.SAT)).toBeVisible({ timeout: DEFAULT_TIMEOUT })
-
-  const badge = page.getByTestId(TestId.solver_method.badge)
-  await expect(badge).toBeVisible()
-  await expect(badge).toContainText('Pr3SAT')
-  await expect(badge).toContainText('ERS')
+  await expect(solver_select.locator('option')).toHaveCount(2)
+  await expect(solver_select.locator('option')).toHaveText(['SMT (Z3)', 'Random Search'])
 })
 
 test('arithmetic-only constraints do not show a probability table', async ({ page }) => {
@@ -220,13 +204,13 @@ test('arithmetic-only constraints do not show a probability table', async ({ pag
   await find_model(page, 'sat', DEFAULT_TIMEOUT)
   await expect(page.getByTestId(TestId.model_table)).toHaveCount(0)
   await expect(page.getByTestId(TestId.state_row.state(0))).toHaveCount(0)
-  await expect(page.getByText('Evaluate model')).toHaveCount(0)
+  await expect(page.locator('.model-evaluators')).toHaveCount(0)
 
   await single_input.getByTestId(test_ids.split.input).fill('1 / (2 / 4) != 2')
   await find_model(page, 'unsat', DEFAULT_TIMEOUT)
   await expect(page.getByTestId(TestId.model_table)).toHaveCount(0)
   await expect(page.getByTestId(TestId.state_row.state(0))).toHaveCount(0)
-  await expect(page.getByText('Evaluate model')).toHaveCount(0)
+  await expect(page.locator('.model-evaluators')).toHaveCount(0)
 });
 
 test('adding a bunch of constraints', async ({ page }) => {
@@ -266,36 +250,31 @@ test('adding then removing a bunch of constraints', async ({ page }) => {
   }
 })
 
-test('multiple constraints', async ({ page }) => {
+test('multiple TwistPrSAT constraints', async ({ page }) => {
   await to_load(page)
   const single_inputs: Locator[] = []
   const test_ids = TestId.generic_multi_input('constraints')
 
   single_inputs.push(page.getByTestId(test_ids.split.single.get(0)))
   await expect(single_inputs[0]).toBeVisible()
-  await single_inputs[0].getByTestId(test_ids.split.input).fill('Pr(A & B & C) = Pr(A) * Pr(B) * Pr(C)')
+  await single_inputs[0].getByTestId(test_ids.split.input).fill('Pr(A) = 1')
   await single_inputs[0].getByTestId(test_ids.split.newline).click()
 
   single_inputs.push(page.getByTestId(test_ids.split.single.get(1)))
   await expect(single_inputs[1]).toBeVisible()
-  await single_inputs[1].getByTestId(test_ids.split.input).fill('Pr(A & B) = Pr(A) * Pr(B)')
+  await single_inputs[1].getByTestId(test_ids.split.input).fill('Pr(~A) = 1')
   await single_inputs[1].getByTestId(test_ids.split.newline).click()
 
   single_inputs.push(page.getByTestId(test_ids.split.single.get(2)))
   await expect(single_inputs[2]).toBeVisible()
-  await single_inputs[2].getByTestId(test_ids.split.input).fill('Pr(A & C) = Pr(A) * Pr(C)')
-  await single_inputs[2].getByTestId(test_ids.split.newline).click()
-
-  single_inputs.push(page.getByTestId(test_ids.split.single.get(3)))
-  await expect(single_inputs[3]).toBeVisible()
-  await single_inputs[3].getByTestId(test_ids.split.input).fill('Pr(B & C) = Pr(B) * Pr(C)')
+  await single_inputs[2].getByTestId(test_ids.split.input).fill('Pr(○A) = 0')
 
   await find_model(page, 'sat')
   await expect(page.getByTestId(TestId.model_table)).toBeVisible({ timeout: DEFAULT_TIMEOUT })
   await expect(page.getByText(Constants.SAT)).toBeVisible()
 })
 
-test('weird model', async ({ page }) => {
+test('regular TwistPrSAT model with several constraints', async ({ page }) => {
   await to_load(page)
   const single_inputs: Locator[] = []
   const test_ids = TestId.generic_multi_input('constraints')
@@ -304,27 +283,17 @@ test('weird model', async ({ page }) => {
 
   single_inputs.push(page.getByTestId(test_ids.split.single.get(0)))
   await expect(single_inputs[0]).toBeVisible()
-  await single_inputs[0].getByTestId(test_ids.split.input).fill('Pr(A & B & C) > Pr(A & B) * Pr(C)')
+  await single_inputs[0].getByTestId(test_ids.split.input).fill('Pr(A) > 0')
   await single_inputs[0].getByTestId(test_ids.split.newline).click()
 
   single_inputs.push(page.getByTestId(test_ids.split.single.get(1)))
   await expect(single_inputs[1]).toBeVisible()
-  await single_inputs[1].getByTestId(test_ids.split.input).fill('Pr(A & B) = Pr(A) * Pr(B)')
+  await single_inputs[1].getByTestId(test_ids.split.input).fill('Pr(~A) > 0')
   await single_inputs[1].getByTestId(test_ids.split.newline).click()
 
   single_inputs.push(page.getByTestId(test_ids.split.single.get(2)))
   await expect(single_inputs[2]).toBeVisible()
-  await single_inputs[2].getByTestId(test_ids.split.input).fill('Pr(A & C) = Pr(A) * Pr(C)')
-  await single_inputs[2].getByTestId(test_ids.split.newline).click()
-
-  single_inputs.push(page.getByTestId(test_ids.split.single.get(3)))
-  await expect(single_inputs[3]).toBeVisible()
-  await single_inputs[3].getByTestId(test_ids.split.input).fill('Pr(B & C) = Pr(B) * Pr(C)')
-  await single_inputs[3].getByTestId(test_ids.split.newline).click()
-
-  single_inputs.push(page.getByTestId(test_ids.split.single.get(4)))
-  await expect(single_inputs[4]).toBeVisible()
-  await single_inputs[4].getByTestId(test_ids.split.input).fill('Pr(A & B) = Pr(C)')
+  await single_inputs[2].getByTestId(test_ids.split.input).fill('Pr(○A) < 1')
 
   await page.waitForTimeout(Constants.DEFAULT_DEBOUNCE_MS)  // Wait for all the inputs to update correctly.
 
@@ -433,19 +402,6 @@ const LONGISH_SOLVE: string[] = [
   'Pr(C | A) - Pr(C) = Pr(C | A & B) - Pr(C | B)',
   'Pr(B \\/ C | A) <= Pr(B \\/ C)',
 ]
-const MEDIUM_SOLVE: string[] = [
-  'Pr(A & B) = Pr(A) * Pr(B)',
-  'Pr(A & C) = Pr(A) * Pr(C)',
-  'Pr(B & C) = Pr(B) * Pr(C)',
-  'Pr(A & B & C) ≠ Pr(A) * Pr(B) * Pr(C)',
-]
-const LIKELIHOOD_RATIO_SOLVE: string[] = [
-  '(Pr(H | E1 & E2) - Pr(H | ~E1 & E2)) = (Pr(H | E1) - Pr(H | ~E1))',
-  '(Pr(H | E2 & E1) - Pr(H | ~E2 & E1)) = (Pr(H | E2) - Pr(H | ~E2))',
-  'Pr(H | E1) - Pr(H | ~E1) = 1/2',
-  'Pr(H | E2) - Pr(H | ~E2) = -1/2',
-  'Pr(H | E1 & E2) - Pr(H | ~(E1 & E2)) != 0',
-]
 const SUPER_LONG_SOLVE: string[] = [
   'Pr(X & Y) = Pr(X) * Pr(Y)',
   'Pr(X & Z) = Pr(X) * Pr(Z)',
@@ -461,21 +417,12 @@ const SUPER_LONG_SOLVE: string[] = [
 ]
 const SHORT_WAIT_MS = 50
 
-test('direct Z3 preserves the fast regular likelihood-ratio UNSAT result', async ({ page }) => {
-  await to_load(page)
-  await set_block_input(page, TestId.generic_multi_input('constraints'), LIKELIHOOD_RATIO_SOLVE)
-  await page.getByTestId(TestId.regular_toggle).check()
-  await find_model(page, 'unsat', 10_000)
-})
-
-test('direct ERS Z3 preserves totalized zero-denominator semantics', async ({ page }) => {
+test('direct Z3 rejects a reliable contradiction in LET_K+', async ({ page }) => {
   await to_load(page)
   await set_block_input(page, TestId.generic_multi_input('constraints'), [
-    'Pr(A -> B) = 0',
-    'Pr(A) = 0',
+    'Pr(A & ~A & ○A) = 1',
   ])
-  await page.getByTestId(TestId.solver_method.trivalent_toggle).check()
-  await find_model(page, 'unsat', 10_000)
+  await find_model(page, 'unsat', DEFAULT_TIMEOUT)
 })
 
 test('cancelling shows cancel message', async ({ page }) => {
@@ -655,41 +602,5 @@ test('eval after 1st solve after invalidation does NOT say no model', async ({ p
   await set_block_input(page, eval_test_ids, eval_input_array)
 
   const eval_block = get_multi_input_block(page, eval_test_ids, 0, eval_input_array.length)
-  await expect(eval_block.splits[0].output).not.toContainText(Constants.NO_MODEL)
-})
-
-const set_timeout = async (page: Page, total_seconds: number): Promise<void> => {
-  const timeout_e = page.getByTestId(TestId.timeout.id)
-  const seconds_e = timeout_e.getByTestId(TestId.timeout.seconds)
-  await seconds_e.fill(total_seconds.toString())
-}
-
-test('eval during 2nd solve says no model then updates correctly with model', { tag: '@slow' }, async ({ page }) => {
-  test.setTimeout(2 * 1000 * 60)  // 2 minutes to account for solve.
-  await to_load(page)
-
-  const solve_timeout_s = 2 * 60
-  await set_timeout(page, solve_timeout_s)
-
-  const constraint_test_ids = TestId.generic_multi_input('constraints')
-  const constraint_input_array = ['Pr(A & B) = Pr(A) * Pr(B)']
-  await set_block_input(page, constraint_test_ids, constraint_input_array)
-  await find_model(page, 'sat')
-
-  // The second direct Z3 call remains in flight long enough to inspect the
-  // no-model state.
-  const constraint_input_array2 = MEDIUM_SOLVE
-  await set_block_input(page, constraint_test_ids, constraint_input_array2)
-  const second_solve = find_model(page, 'sat', solve_timeout_s * 1000)
-  // await find_model(page, 'sat', solve_timeout_s * 1000)
-  await page.waitForTimeout(SHORT_WAIT_MS)
-
-  const eval_test_ids = TestId.generic_multi_input('eval')
-  const eval_input_array = ['Pr(-A & -B)']
-  await set_block_input(page, eval_test_ids, eval_input_array)
-
-  const eval_block = get_multi_input_block(page, eval_test_ids, 0, 1)
-  await expect(eval_block.splits[0].output).toContainText(Constants.NO_MODEL)
-  await second_solve
   await expect(eval_block.splits[0].output).not.toContainText(Constants.NO_MODEL)
 })
