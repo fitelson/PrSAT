@@ -19,6 +19,8 @@ Updated: 2026-08-27
 - The public header contains a detailed quick-start guide covering syntax,
   coordinates, six region formulas, solvers, regularity, definedness, resource
   limits, and model evaluation.
+- A linked, ready-to-load `TwistPrSAT_examples.txt` file specifies the uniform
+  six-region model and its derived coordinates and conditional probabilities.
 - Public deployment completed at `https://fitelson.org/PrSAT/twist/`.
 
 ## Verification gate
@@ -51,8 +53,8 @@ Updated: 2026-08-27
 
 - TypeScript and ESLint: passed.
 - Production build: passed.
-- Vitest: 732 passed, 1 skipped, 1 todo across 25 files.
-- Chromium Playwright: 27 passed, 1 intentionally skipped.
+- Vitest: 735 passed, 1 skipped, 1 todo across 26 files.
+- Chromium Playwright: 28 passed, 1 intentionally skipped.
 - Production dependency audit: 0 vulnerabilities.
 - Live HTTP and asset checks: passed with HTTP 200 and required COOP/COEP
   headers.

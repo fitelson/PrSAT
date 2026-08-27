@@ -62,6 +62,20 @@ test('TwistPrSAT defaults to LET_K+ and solves a glut with Z3', async ({ page })
   await expect(page.getByTestId(TestId.solver_method.badge)).toContainText('LET_K+')
 })
 
+test('public example file is linked and ready to load', async ({ page }) => {
+  await load_app(page)
+  const link = page.getByRole('link', { name: 'Download a ready-to-load example file' })
+  await expect(link).toBeVisible()
+  await expect(link).toHaveAttribute('href', 'TwistPrSAT_examples.txt')
+  await expect(link).toHaveAttribute('download', '')
+
+  const response = await page.request.get(`${URL}TwistPrSAT_examples.txt`)
+  expect(response.ok()).toBe(true)
+  const text = await response.text()
+  expect(text).toContain('Pr(A & oA) = 1/6')
+  expect(text.trim().split(/\r?\n/)).toHaveLength(13)
+})
+
 test('TwistPrSAT Random Search uses browser algebra for an exact glut witness', async ({ page }) => {
   await load_app(page)
   const test_ids = TestId.generic_multi_input('constraints')

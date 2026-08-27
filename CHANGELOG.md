@@ -16,4 +16,6 @@
 - Expanded the public header with a detailed quick-start guide, syntax,
   coordinate and region formulas, solver guidance, definedness conditions,
   and the four-letter resource bound.
+- Added a downloadable, ready-to-load example file for the uniform six-region
+  model, verified independently by Z3 and Random Search/browser algebra.
 - Deployed to `https://fitelson.org/PrSAT/twist/`.

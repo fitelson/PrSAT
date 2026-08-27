@@ -1,0 +1,13 @@
+Pr(A & oA) = 1/6
+Pr(A & cnot (~A v oA)) = 1/6
+Pr(A & ~A) = 1/6
+Pr(~A & cnot (A v oA)) = 1/6
+Pr(~A & oA) = 1/6
+Pr(cnot (A v ~A)) = 1/6
+Pr(A) = 1/2
+Pr(~A) = 1/2
+Pr(oA) = 1/3
+Pr(A v ~A) = 5/6
+Pr(cnot A) = 1/2
+Pr(oA | A) = 1/3
+Pr(~A | A) = 1/3

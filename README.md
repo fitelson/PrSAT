@@ -35,6 +35,10 @@ Object-language syntax:
 Conditional probability `Pr(B | A)` is the ordinary ratio
 `Pr(B & A) / Pr(A)` and therefore requires `Pr(A) != 0`.
 
+`public/TwistPrSAT_examples.txt` is a ready-to-load batch file. It gives each
+of the six regions probability `1/6` and checks the induced one-, three-, and
+six-dimensional quantities and two conditional probabilities.
+
 ## Solvers
 
 - **SMT (Z3)** is the decision-procedure path. Formulas are evaluated on all
