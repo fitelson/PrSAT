@@ -1,7 +1,7 @@
 TWISTPRSAT THEOREM CHALLENGES
 
 Source paper:
-  V. Borja Macias, M. E. Coniglio, and A. Hernandez-Tello,
+  Verónica Borja Macias, Marcelo E. Coniglio, and Alejandro Hernández-Tello,
   "Probabilities beyond Belnap-Dunn logic: dealing with gaps, gluts and
   reliability," arXiv:2608.20228v1.
 

@@ -1,8 +1,8 @@
 # TwistPrSAT
 
 TwistPrSAT is a browser-based probability-satisfiability checker for the
-six-valued logic `LET_K+` used in Borja Macias, Coniglio, and
-Hernandez-Tello, *Probabilities beyond Belnap-Dunn logic: dealing with gaps,
+six-valued logic `LET_K+` used in Verónica Borja Macias, Marcelo E. Coniglio,
+and Alejandro Hernández-Tello, *Probabilities beyond Belnap-Dunn logic: dealing with gaps,
 gluts and reliability* (arXiv:2608.20228).
 
 Live app: <https://fitelson.org/PrSAT/twist/>
