@@ -62,7 +62,7 @@ test('TwistPrSAT defaults to LET_K+ and solves a glut with Z3', async ({ page })
   await expect(page.getByTestId(TestId.solver_method.badge)).toContainText('LET_K+')
 })
 
-test('public example file is linked and ready to load', async ({ page }) => {
+test('public model and theorem example files are linked and ready to load', async ({ page }) => {
   await load_app(page)
   const link = page.getByRole('link', { name: 'Download a ready-to-load example file' })
   await expect(link).toBeVisible()
@@ -74,6 +74,16 @@ test('public example file is linked and ready to load', async ({ page }) => {
   const text = await response.text()
   expect(text).toContain('Pr(A & oA) = 1/6')
   expect(text.trim().split(/\r?\n/)).toHaveLength(13)
+
+  const theorem_link = page.getByRole('link', { name: 'Open the theorem-challenge index' })
+  await expect(theorem_link).toBeVisible()
+  await expect(theorem_link).toHaveAttribute('href', 'TwistPrSAT_theorem_examples.txt')
+  const theorem_index = await page.request.get(`${URL}TwistPrSAT_theorem_examples.txt`)
+  expect(theorem_index.ok()).toBe(true)
+  expect(await theorem_index.text()).toContain('04_inclusion_exclusion_unsat.txt')
+  const theorem_challenge = await page.request.get(`${URL}theorems/04_inclusion_exclusion_unsat.txt`)
+  expect(theorem_challenge.ok()).toBe(true)
+  expect((await theorem_challenge.text()).trim()).toBe('Pr(A) + Pr(B) != Pr(A & B) + Pr(A v B)')
 })
 
 test('TwistPrSAT Random Search uses browser algebra for an exact glut witness', async ({ page }) => {

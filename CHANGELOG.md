@@ -18,4 +18,7 @@
   and the four-letter resource bound.
 - Added a downloadable, ready-to-load example file for the uniform six-region
   model, verified independently by Z3 and Random Search/browser algebra.
+- Added a theorem-challenge index and ten separately loadable UNSAT files for
+  central propositions and representation identities from the paper; the
+  entire pack is regression-tested through Z3.
 - Deployed to `https://fitelson.org/PrSAT/twist/`.

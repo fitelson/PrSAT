@@ -1,0 +1,49 @@
+TWISTPRSAT THEOREM CHALLENGES
+
+Each numbered file below is separately loadable in TwistPrSAT.  It states the
+negation of a theorem or proposition from the paper.  Select SMT (Z3), load one
+file from the `theorems` folder, and press Find Model.  The expected result is
+UNSAT: no probability model is a counterexample to the stated result.
+
+01_reliable_contradiction_unsat.txt
+  Proposition 4(3): p(A & ~A & oA) = 0.
+  Challenge: Pr(A & ~A & oA) > 0
+
+02_reliability_bound_unsat.txt
+  Proposition 4(4): p(oA) <= p(A v ~A).
+  Challenge: Pr(oA) > Pr(A v ~A)
+
+03_classical_negation_complement_unsat.txt
+  Proposition 4(7): p(cnot A) = 1 - p(A).
+  Challenge: Pr(cnot A) != 1 - Pr(A)
+
+04_inclusion_exclusion_unsat.txt
+  Definition 10, Ax1.4: p(A)+p(B) = p(A & B)+p(A v B).
+  Challenge: Pr(A) + Pr(B) != Pr(A & B) + Pr(A v B)
+
+05_positive_region_decomposition_unsat.txt
+  Corollary 3 / the P1-to-P6 translation: positive mass is B° plus B
+  plus C.
+  Challenge: Pr(A) != Pr(A & oA) + Pr(A & cnot (~A v oA)) + Pr(A & ~A)
+
+06_negative_region_decomposition_unsat.txt
+  Corollary 3 / the P1-to-P6 translation: negative mass is D° plus D
+  plus C.
+  Challenge: Pr(~A) != Pr(~A & oA) + Pr(~A & cnot (A v oA)) + Pr(A & ~A)
+
+07_reliability_region_decomposition_unsat.txt
+  Corollary 2: reliability mass is B° plus D°.
+  Challenge: Pr(oA) != Pr(A & oA) + Pr(~A & oA)
+
+08_six_region_partition_unsat.txt
+  Definition 12, Ax6.3 / Proposition 2: the six region probabilities sum to 1.
+  Challenge: the displayed six-term sum is not 1.
+
+09_entailment_identity_unsat.txt
+  Proposition 4(8): if psi entails phi, then p(phi & psi)=p(psi).
+  Here psi is A & B and phi is A.
+  Challenge: Pr(A & (A & B)) != Pr(A & B)
+
+10_classical_difference_identity_unsat.txt
+  Proposition 4(9): p(phi & cnot psi)=p(phi)-p(phi & psi).
+  Challenge: Pr(A & cnot B) != Pr(A) - Pr(A & B)

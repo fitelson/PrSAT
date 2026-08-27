@@ -1,0 +1,1 @@
+Pr(oA) > Pr(A v ~A)
