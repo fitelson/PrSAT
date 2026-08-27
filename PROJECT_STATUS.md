@@ -14,7 +14,7 @@ Updated: 2026-08-27
   equation solver and exact rational verification.
 - TwistPrSAT is the default semantic mode; inherited Classical, ERS, and CCK
   comparison modes remain available.
-- Public deployment target: `https://fitelson.org/PrSAT/twist/`.
+- Public deployment completed at `https://fitelson.org/PrSAT/twist/`.
 
 ## Verification gate
 
@@ -49,6 +49,14 @@ Updated: 2026-08-27
 - Vitest: 764 passed, 1 skipped, 1 todo across 28 files.
 - Chromium Playwright: 29 passed, 1 intentionally skipped.
 - Production dependency audit: 0 vulnerabilities.
+- Live HTTP and asset checks: passed with HTTP 200 and required COOP/COEP
+  headers.
+- Live/local `z3-built.wasm` SHA-256 match:
+  `2765f5443a5a3a41aace71a82dd954e3b8c885a7d621b50122b1aede0dc8348a`.
+- Real-browser Z3 certificate: glut constraints SAT, six table rows displayed
+  in order `T,t,b,f,F,n`, no console errors.
+- Real-browser Random Search certificate: SAT via browser algebra with fixed
+  seed `live-twist-certificate`, no console errors.
 
 ## Scope
 
