@@ -44,6 +44,9 @@ Pr(X | Y) < Pr(X)
 % (2) Pr(B | A <-> B) = Pr(B | ~(A <-> B))
 % (3) Pr(A) = Pr(B) = 1/2
 
+% as a single statement (negation)
+~(((Pr(A | A <-> B) = Pr(A | ~(A <-> B))) & (Pr(B | A <-> B) = Pr(B | ~(A <-> B)))) <-> ((Pr(A) = Pr(B)) & Pr(B) = 1/2))
+
 % IF direction (I)
 Pr(A) = Pr(B)
 Pr(A) = 1/2

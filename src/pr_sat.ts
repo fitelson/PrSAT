@@ -2056,7 +2056,7 @@ export const evaluate_real_expr_2 = (tt: TruthTable, state_values: Record<number
       return combine_eval_results(
         evaluate_real_expr_2(tt, state_values, expr.numerator),
         evaluate_real_expr_2(tt, state_values, expr.denominator),
-        (n, d) => {
+        (n, d): Res<number, EvaluationError> => {
           if (d === 0) {
             return [false, { tag: 'div0' }]
           } else {

@@ -2,6 +2,23 @@
 
 > **Note:** This is a local build for deployment to fitelson.org.
 
+## 2026-10-11
+
+### Upgraded: Runtime, Build, Test, and Solver Tooling
+
+- Upgraded Node.js to 26.11.1 and npm to 12.2.0, and recorded their compatibility contract in `package.json`.
+- Upgraded every direct dependency to its latest stable release, including `z3-solver` 5.2.0, Playwright 1.64.0, jsdom 30.1.2, ESLint 10.12.0, Vite 8.3.4, and Vitest 5.0.3.
+- Adopted TypeScript 7.0.2 for compilation, with the official TypeScript 6.0.3 compatibility API package used side-by-side by `typescript-eslint` until it supports the TypeScript 7 API.
+- Verified that the bundled and live-deployed Z3 JS/WASM files are byte-identical to `z3-solver` 5.2.0; the embedded native engine reports Z3 5.1.0.0, matching the latest stable upstream Z3 release.
+- Verification: `npm run build`, `npm run lint`, and `npm test` pass (594 committed unit tests and all 19 Chromium tests). `npm audit` reports 0 vulnerabilities.
+
+## 2026-08-31
+
+### Changed: Project Webpage Branding
+
+- Added `(*a.k.a.*, The Probability Table Generator)` beneath the PrSAT 3.0 project-page subtitle, with responsive desktop/mobile styling.
+- Deployed the updated project webpage to `https://fitelson.org/PrSAT/`.
+
 ## 2026-07-10
 
 ### Fixed: Solver Soundness, Input Races, and Evaluation

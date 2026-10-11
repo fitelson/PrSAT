@@ -62,6 +62,13 @@ npx vitest --allowOnly   # Run single test (add .only to test)
 npx playwright test --project chromium tests/simple.spec.ts  # Single e2e test
 ```
 
+## Graphify Codebase Graph
+
+- Code-only graph built 2026-06-27 at `graphify-out/`: 607 nodes, 1377 clustered edges, 36 communities, 0 LLM tokens.
+- `.graphifyignore` keeps the graph code-only by excluding docs/PDFs, `node_modules/`, `dist/`, generated artifacts, JSON lock/data files, HTML pages, and bundled Z3 assets.
+- Query from the repo root with `graphify query "..."`; inspect paths with `graphify path "A" "B"` and node neighborhoods with `graphify explain "X"`.
+- After source edits, run `graphify update .` from the repo root to refresh the AST graph.
+
 ## Deployment Notes
 
 - **GitHub repo:** `fitelson/PrSAT` (forked from `imapersonman/PrSAT`)
@@ -82,6 +89,7 @@ Symbols are defined identically in `src/pr_sat.ts` (`possible_constraint_connect
 
 ## Recent Work (2026)
 
+- **2026-08-31:** Added `(*a.k.a.*, The Probability Table Generator)` beneath the PrSAT 3.0 project-page subtitle and deployed the updated webpage to fitelson.org.
 - **2026-06-12:** Added Decimals/Fractions toggle button to the Evaluate model toolbar (4-decimal approximations of evaluation results; ported from the 3.1 experimental fork).
 
 - **2026-06-10:** Fixed the June 2026 bug-review set: critical SMT-LIB soundness bugs for nested `=>`, subtraction, and division; exponentiation handling; parser backtracking; exact numeric literal preservation; local conditional-probability denominator guards; free real-variable declaration/evaluation; native Z3 timeout on the wrapped solver path; UI/input async races; model/root display bugs; deploy dotfile upload; production cache headers. Verification: `npm run build` and `npx vitest --run` pass.
@@ -108,3 +116,17 @@ Symbols are defined identically in `src/pr_sat.ts` (`possible_constraint_connect
 **Modifying constraint translation:** Edit `src/pr_sat.ts`
 
 **After changes:** Run `npm run build` to check for TypeScript errors, then `npx vitest --run` for quick tests.
+
+## Family-Wide Regression Contracts
+
+Canonical shared suite: `fitelson/PrSAT-family-contracts` (local checkout: `../prsat-family-contracts` relative to the `todo` directory). This application uses the `prsat-3.0` profile.
+
+Every bug that can affect more than one PrSAT-style web app must first receive a browser-level regression in `PrSAT-family-contracts/tests/family.spec.mjs`. Keep application-specific semantics in `profiles.mjs`; do not weaken a shared contract merely to accommodate drift.
+
+The branch-local `.github/workflows/family-contracts.yml` calls the complete four-application matrix on every push and pull request. The canonical repository also runs it daily. A failure in another application is a synchronization failure that should be fixed or explicitly modeled as a profile difference.
+
+Run this application locally from the contracts checkout with:
+
+```sh
+npm run test:app -- prsat-3.0 "../PrSAT 3.0/PrSAT-main"
+```
