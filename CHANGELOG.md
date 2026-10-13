@@ -13,13 +13,14 @@
 - Stage both local servers and the app under Application Support, install the
   stable launchd wrappers from the repository, and check both HTTP services.
 - The Maple bridge checks executable readiness at startup and advertises
-  unavailable backends with `ok: false`. Both installed Maple versions
-  currently reject their licenses; optional Maple-dependent tests bypass
-  solving in this environment.
-- Release checks: build, lint, 748 reported passing unit tests and 27 Chromium
-  tests pass, with the existing skip/todo. Maple solving is not certified by
-  this run. Readiness was separately tested with working, failing, and missing
-  mock executables. npm audit reports zero vulnerabilities.
+  unavailable backends with `ok: false`. The Intel-only FlexNet helpers need
+  Apple's Rosetta runtime on Apple silicon. Installing Rosetta restored the
+  existing Maple 2024 license without reactivation; the local bridge is ready.
+- Release checks with Maple available: build, lint, 748 unit tests and 27
+  Chromium tests pass, with the existing skip/todo. All nine focused
+  Maple/conditional-variance integration tests also pass. Readiness was
+  separately tested with working, failing, and missing mock executables.
+  npm audit reports zero vulnerabilities.
 
 ## 2026-07-13
 

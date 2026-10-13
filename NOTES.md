@@ -1,5 +1,24 @@
 # PrSAT 3.0 / 3.1 Development Notes
 
+## Toolchain release (October 13, 2026)
+
+- Compilation uses TypeScript native 7.0.2; ESLint's typed API uses the official
+  TypeScript 6.0.3 compatibility package. Vitest is 5.0.4, Playwright 1.64.0,
+  Vite 8.3.4, ESLint 10.12.0, and jsdom 30.1.2.
+- The installed Z3 wrapper is 5.2.0 and the embedded engine reports 5.1.0.0.
+  Build, lint, the full unit suite (748 passed, 1 skipped, 1 todo), and Chromium
+  suite (27 passed, 1 skipped) pass. The nine focused Maple integration tests
+  also pass against the ready bridge.
+- `npm run install-local-web` stages both server scripts and the built app in
+  `~/Library/Application Support/PrSAT31`, copies the stable launchd wrappers,
+  and restarts/checks both services. Port 5317 remains the permanent local app.
+- Maple 2024's bundled FlexNet helpers require Rosetta on Apple silicon.
+  Installing Apple's Rosetta runtime restored the existing license on this Mac;
+  no new purchase-code activation was needed. The bridge checks Maple at startup
+  and reports `ok: false` if the executable or license is unavailable.
+- The full experimental app remains local; the public Z3-only app is separately
+  published at `https://fitelson.org/PrSAT/trivalent/`.
+
 ## Current solver boundary (July 13, 2026)
 
 - Classical, ERS, and CCK Z3 use the direct translated problem after the
