@@ -59,6 +59,22 @@ const run_maple = (script_path, signal) => new Promise((resolve, reject) => {
   })
 })
 
+const check_maple = async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'prsat-maple-health-'))
+  const script = join(dir, 'health.mpl')
+  try {
+    await writeFile(script, 'lprint(1):\nquit:')
+    await run_maple(script, AbortSignal.timeout(5_000))
+    return true
+  } catch {
+    return false
+  } finally {
+    rm(dir, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
+const MAPLE_READY = await check_maple()
+
 // Split a string on commas at paren/brace depth 0.
 const split_top_level = (s) => {
   const parts = []
@@ -128,7 +144,7 @@ const server = createServer(async (req, res) => {
   }
   if (req.method === 'GET' && req.url === '/ping') {
     res.writeHead(200, { ...headers, 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ ok: true, maple: MAPLE }))
+    res.end(JSON.stringify({ ok: MAPLE_READY, maple: MAPLE }))
     return
   }
   if (req.method === 'POST' && req.url === '/solve') {
@@ -190,5 +206,6 @@ const server = createServer(async (req, res) => {
 })
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`PrSAT Maple bridge listening on http://127.0.0.1:${PORT} (maple: ${MAPLE})`)
+  const status = MAPLE_READY ? 'ready' : 'unavailable'
+  console.log(`PrSAT Maple bridge listening on http://127.0.0.1:${PORT} (maple ${status}: ${MAPLE})`)
 })

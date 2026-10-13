@@ -2,6 +2,25 @@
 
 > **Note:** Experimental fork of 3.0 to prototype a Random Search solver alongside Z3. Not deployed. See `RANDOM_SEARCH.md` for the design, `CLAUDE.md` for guidance.
 
+## 2026-10-13
+
+- Aligned the build and test toolchain with classical PrSAT: TypeScript native
+  compiler 7.0.2 plus the TypeScript 6.0.3 compatibility API, Vite 8.3.4,
+  Vitest 5.0.4, Playwright 1.64.0, ESLint 10.12.0, typescript-eslint 8.71.2,
+  and jsdom 30.1.2. Recorded the Node/npm compatibility requirements.
+- Added an explicit numeric evaluator return type for TypeScript 7 inference.
+  The existing Z3 5.2.0 wrapper and Z3 5.1.0.0 engine are retained.
+- Stage both local servers and the app under Application Support, install the
+  stable launchd wrappers from the repository, and check both HTTP services.
+- The Maple bridge checks executable readiness at startup and advertises
+  unavailable backends with `ok: false`. Both installed Maple versions
+  currently reject their licenses; optional Maple-dependent tests bypass
+  solving in this environment.
+- Release checks: build, lint, 748 reported passing unit tests and 27 Chromium
+  tests pass, with the existing skip/todo. Maple solving is not certified by
+  this run. Readiness was separately tested with working, failing, and missing
+  mock executables. npm audit reports zero vulnerabilities.
+
 ## 2026-07-13
 
 ### Changed: restored a simple solver boundary
