@@ -1,5 +1,16 @@
 # PrSAT 3.1 (Experimental) Changelog
 
+## 2026-10-13
+
+- Aligned the build and test toolchain with classical PrSAT: TypeScript native
+  compiler 7.0.2 plus the TypeScript 6.0.3 compatibility API, Vite 8.3.4,
+  Vitest 5.0.4, Playwright 1.64.0, ESLint 10.12.0, typescript-eslint 8.71.2,
+  and jsdom 30.1.2. Recorded the Node/npm compatibility requirements.
+- Added an explicit numeric evaluator return type for TypeScript 7 inference.
+  The existing Z3 5.2.0 wrapper and Z3 5.1.0.0 engine are retained.
+- Clean release checks: build, lint, 622 unit tests and 23 Chromium tests pass;
+  npm audit reports zero vulnerabilities.
+
 ## 2026-07-10
 
 ### Fixed: solver soundness and trivalent evaluation
