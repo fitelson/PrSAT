@@ -2,6 +2,14 @@
 
 > **Note:** This is a local build for deployment to fitelson.org.
 
+## 2026-10-13
+
+- Updated Vitest to 5.0.4 and typescript-eslint to 8.71.2, with compatible
+  transitive dependency updates. The existing Z3 5.2.0 wrapper and Z3 5.1.0.0
+  engine are retained.
+- Clean release checks: build, lint, 594 unit tests and 19 Chromium tests pass;
+  npm audit reports zero vulnerabilities.
+
 ## 2026-10-11
 
 ### Upgraded: Runtime, Build, Test, and Solver Tooling
